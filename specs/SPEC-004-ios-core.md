@@ -51,7 +51,11 @@ disconnected ─connect─► connecting ─ws open─► authenticating ─auth
 - GRDB 表：`conversations`（含冗余的 lastMessage 摘要与 unreadCount——列表页
   一次查询渲染，不做 N+1）、`messages`（主键 `(convId, convSeq)`，pending 消息
   convSeq 为 null 用 clientMsgId 排尾）、`outbox`、`syncState`（游标）。
-- 会话页：倒序分页 50 条/页，`ScrollView` + `LazyVStack` 反转技巧；
+- 会话页：倒序分页 50 条/页；滚动容器**从 M1 起即用** iOS 17 原生
+  `scrollPosition` + `defaultScrollAnchor(.bottom)`，不用倒置列表
+  （inverted list）反转技巧——反转的手势/上下文菜单镜像坑多，且 M4 的
+  `ScrollAnchorController`（012）建立在原生锚定之上，现在就用对，
+  M4 就没有容器层迁移（评审 A11 的消解）；
   聊天气泡视图必须是纯函数 of 数据行（Equatable），滚动才不掉帧。
 - 写合并：sync 批量落库在**单个 GRDB 事务**里完成，ValueObservation 只触发
   一次 UI 刷新（1000 条离线消息不能刷 1000 次）。
@@ -78,7 +82,19 @@ ios/LiveChat/
 
 **In**：上述全部 + 登录/token 管理 + 基础会话/消息 UI（不追求视觉打磨）。
 **Out**：推送（008）、媒体（009）、多设备（010）、E2EE（011）、
-消息全文搜索（GRDB FTS5 预留 virtual table，实现延后）。
+消息全文搜索（GRDB FTS5 预留 virtual table，014 兑现）。
+
+**M4 扩展点（本 spec 实现时预留的接缝，不提前实现）**：
+- 状态机：连接机与消息生命周期机将迁入 012 的统一 FSM 范式——M1 阶段
+  写法保持简单，但**转移逻辑收敛在单一 reducer 函数**内，别散进视图层，
+  迁移才是搬家不是重写；消息生命周期预留 `streaming` 分支位（013）；
+- 渲染：气泡文本组件保持可替换——M4 时**全部气泡**（流式与非流式）统一
+  切到 012 的 TextKit 2 引擎，本 spec 的纯 SwiftUI `Text` 实现是 M1 原型，
+  M4 删除（评审 A7 定案：不留双排版路径）；滚动容器无需迁移（挑战 C 已用
+  原生锚定，012 只叠加策略层）；
+- AI 入口：任何 M4 AI 组件（014）以 `@available(iOS 26, *)` 编译期守卫，
+  App 部署目标保持 iOS 17 不动（评审 C6）；
+- 数据：消息表的 FTS5 virtual table 建表即预留（014 语义搜索双路召回之一）。
 
 ## 5. 验收标准（真机实验）
 

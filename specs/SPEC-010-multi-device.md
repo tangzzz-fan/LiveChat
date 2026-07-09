@@ -18,8 +18,18 @@ iPhone 已收到消息 ≠ iPad 也收到了。**解法：**
   收件箱是用户级的"事实"）；
 - 游标变成 per-device：`sync_state(user_id, device_id, last_ack_inbox_seq)`。
   每台设备独立执行 SPEC-003 的游标同步协议，互不干扰；
+- **最慢设备不拖累回收（评审 C1）**：inbox 条目的删除**不等待**全部设备
+  ACK，遵循 SPEC-003 的保留策略（`max(30d, 全设备 max(last_active_at)+7d)`
+  后物理删除）。长期不上线的设备重新连上时游标已出窗 → 服务端返回
+  `gap_detected=true` → 该设备降级为 per-conversation `conv_seq` 范围拉取。
+  两份 spec 引用同一条策略，语义以 SPEC-003 为准；
 - 路由表升级：`route:{uid}` 从单值变集合 `{device_id → gateway_id}`，
   在线推送遍历该用户所有在线设备。
+  **key 格式迁移（评审 A2）**：不改旧 key 的 value 格式，改用新 pattern
+  `route:{uid}:{device_id}`（在线推送用 `SCAN`/预存的 device 列表拼 key 批量
+  MGET）。上线次序：先双读（新 key 优先，miss 时 fallback 旧 `route:{uid}`），
+  写只写新 key；旧 key 靠原有 TTL（90s）自然过期，双读代码在一个版本周期后
+  删除。零停机、无离线迁移窗口。
 
 ### 挑战 B：自己发的消息要出现在自己的其他设备上
 

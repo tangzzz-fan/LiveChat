@@ -25,7 +25,14 @@ Diffie-Hellman 要求双方在线各出一半。IM 里 Alice 半夜给离线的 
 - Alice 发首条消息：找服务器要 Bob 的 prekey bundle → 本地做 3~4 组 DH
   （IK/EK × IK/SPK/OPK 组合）→ 派生初始根密钥 → 直接开始加密发送；
 - 服务器在这里只是**公钥公告板**，看不到任何私钥或共享密钥；
-- OPK 耗尽的降级路径（只用 SPK，牺牲一点前向性）+ 客户端低水位自动补铸。
+- **OPK 耗尽的完整连动（评审 A4）**——三方各有明确职责：
+  - Key Server：OPK 存量为 0 时照常返回 bundle（无 OPK 版本）并置
+    `opk_exhausted=true`；每次取 bundle 消耗一个 OPK（原子 pop，防并发
+    双发同一 OPK）；对同一目标的 bundle 请求限速（防恶意抽干 OPK 池）；
+  - Bob（被取方）：每次上线 + 每收到 `opk_low` 服务端信令（存量 ≤ 20 触发）
+    时补铸至 100 个，不等用完才补；
+  - Alice（发起方）：收到 `opk_exhausted=true` 时正常走 SPK-only X3DH
+    （牺牲该会话首消息的一次性前向性，协议允许），不报错不重试。
 
 ### 挑战 B：长会话的前向/后向保密 —— Double Ratchet
 
@@ -81,8 +88,18 @@ libsignal 集成、1:1 双棘轮全链路、群 Sender Keys、附件加密、加
 1. **服务器盲测（本 spec 的灵魂实验）**：全量跑通 M1/M2 全部功能后，
    dump PG + Redis + 网关内存/日志，grep 任何一条测试消息的明文 → 零命中；
    messages.content 全部为密文（自动化脚本断言）。
+   **豁免声明（评审 A12）**：bot 会话（013）架构性不加密，盲测脚本显式
+   过滤 `WHERE conv_id NOT IN (bot 会话)`，豁免清单在测试用例中明文列出，
+   禁止静默跳过；并加**反向断言**：bot 会话的 content 必须是明文
+   （防止哪天 bot 会话被误加密，aisvc 静默读不懂而无人察觉）。
 2. 前向保密实验：导出接收方当前 ratchet 状态 → 尝试解密该会话 100 条前的
-   历史密文 → 失败。
+   历史密文 → 失败。**"失败"的判定语义（评审 E5）**：libsignal 对无对应
+   消息密钥的密文抛 `DuplicateMessageError`/`InvalidMessageException`
+   （不会静默返回垃圾明文——AEAD 认证标签保证）；验收脚本断言"捕获到
+   解密异常"，实施前先跑一个 spike 确认绑定层的具体异常类型并写进脚本。
+2b. OPK 耗尽实验：抽干 Bob 的 OPK 池 → Alice 发首条消息成功（SPK-only
+   路径），延迟 < 2× 正常首消息；Bob 上线后 OPK 池自动回补至 100
+   （Key Server 计数为证）。
 3. 踢人实验：500 人群踢掉成员 X → X 用被踢前的密钥材料解密后续群消息 → 失败；
    全群重分发的密钥消息量 = O(N) 且被批量优化（指标）。
 4. 加密附件：MinIO 上的对象无法用任何服务端信息解出；接收方正常显图。

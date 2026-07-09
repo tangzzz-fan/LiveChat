@@ -1,0 +1,54 @@
+# Go
+server/gateway/gateway
+server/msgsvc/msgsvc
+server/api/api
+server/pushworker/pushworker
+server/aisvc/aisvc
+*.exe
+*.test
+*.out
+vendor/
+
+# iOS
+ios/.build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Pods/
+*.xcuserstate
+*.xcscmblueprint
+
+# Proto generated code
+proto/gen/
+
+# Loadtest
+loadtest/loadtest
+loadtest/report/*.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Environment & secrets
+.env
+.env.*
+*.p8
+*.p12
+*.jks
+secrets/
+
+# Deploy volumes
+deploy/data/
+deploy/prometheus/data/
+deploy/grafana/data/

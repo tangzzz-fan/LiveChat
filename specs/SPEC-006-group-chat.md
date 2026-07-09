@@ -31,8 +31,19 @@ Discord 频道无上限（因此被迫读扩散）。
 **解法：扇出任务持久化（outbox pattern 的服务端版）**：发送事务同时写一行
 `fanout_jobs(msg_id, status)`；worker 领任务 → 批量写 inbox（单群一条 SQL
 `INSERT ... SELECT FROM group_members`，不是 500 次单写）→ 标完成。
-worker 崩溃 → 任务重新可见 → 重做（inbox 写幂等：`ON CONFLICT DO NOTHING`，
-主键 `(user_id, inbox_seq)` 换成 `(user_id, conv_id, conv_seq)` 派生即可幂等）。
+worker 崩溃 → 任务重新可见 → 重做。
+
+**幂等的精确机制（评审 C2 修正）**：inbox 主键 `(user_id, inbox_seq)`
+挡不住重做——重做会分配**新的** `inbox_seq`，新主键不冲突，同一条消息
+就被投递两次。真正的幂等键是"同一消息对同一用户"，即 SPEC-003 DDL 中的：
+
+```sql
+CONSTRAINT uq_inbox_msg UNIQUE (user_id, conv_id, conv_seq)
+```
+
+扇出 SQL 写成 `INSERT ... SELECT ... ON CONFLICT ON CONSTRAINT uq_inbox_msg
+DO NOTHING`——重做时已投递的行被约束吸收，只补写缺失的行。不改主键
+（游标轴保持 `inbox_seq`），只加唯一约束，M1 的 DDL 已包含。
 客户端游标同步（SPEC-003）天然兜底扇出延迟：慢了会到，不会丢。
 
 ### 挑战 C：在线推送的批量化
