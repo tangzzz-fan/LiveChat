@@ -88,6 +88,9 @@ Issues 使用本地 `issues/` 目录（不依赖 GitHub Issues）。见 `docs/ag
 - 使用 `brew` 管理本地服务
 - 通过 `proxy_on` 开启终端代理访问外网
 - `livechat-server/Makefile` 提供常用命令
+- **一键搭建**: `./scripts/setup.sh`（首次使用）
+- **一键启动**: `./scripts/setup.sh --start`（启动所有服务）
+- **停止服务**: `./scripts/stop.sh`
 
 ### Issue 实现约定
 
@@ -101,7 +104,7 @@ Issues 使用本地 `issues/` 目录（不依赖 GitHub Issues）。见 `docs/ag
 每个新 Phase 开始前：
 
 1. **读 spec**：重读该 Phase 对应的 spec 文档，确认 P0 范围和已实现的基础。
-2. **拆 ticket**：按 spec 的 P0 交付物拆成独立可验证的垂直切片。
+2. **拆 ticket**：按 spec 的 P0 交付物拆成独立可验证的垂直切片, 使用 /to-ticket 命令。
    - 每个 ticket 有明确的 Acceptance Criteria（可演示的端到端行为）。
    - ticket 之间标注依赖关系（blocked_by）。
    - ticket 编号从上一个 Phase 的最大编号 +1 开始递增。
