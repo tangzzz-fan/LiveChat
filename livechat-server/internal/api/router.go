@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -14,6 +16,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/group"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
@@ -26,11 +29,13 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	msgSvc := messages.NewService(db)
 	syncSvc := sync.NewService(db)
 	convSvc := conversations.NewService(db)
+	groupSvc := group.NewService(db)
 	msgSvc.SetConversationUpdater(convSvc)
 
 	// Auth endpoints (public)
 	mux.HandleFunc("POST /v1/auth/register", handleRegister(db, authSvc))
 	mux.HandleFunc("POST /v1/auth/login", handleLogin(db, authSvc))
+	mux.HandleFunc("POST /v1/auth/refresh", handleRefreshToken(db, authSvc))
 
 	// Health
 	mux.HandleFunc("GET /health", handleHealth(db, rdb))
@@ -38,12 +43,22 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	// Metrics
 	mux.Handle("GET /metrics", metrics.Handler())
 
-	// Authenticated endpoints
+	// Device management
 	authMw := newAuthMiddleware(authSvc)
+	mux.Handle("GET /v1/devices", authMw.Wrap(http.HandlerFunc(handleListDevices(db))))
+	mux.Handle("POST /v1/devices/{did}/revoke", authMw.Wrap(http.HandlerFunc(handleRevokeDevice(db))))
+
+	// Core endpoints
 	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
 	mux.Handle("GET /v1/sync/events", authMw.Wrap(http.HandlerFunc(handleGetSyncEvents(syncSvc))))
 	mux.Handle("GET /v1/conversations/{cid}/messages", authMw.Wrap(http.HandlerFunc(handleGetMessages(syncSvc))))
 	mux.Handle("GET /v1/conversations", authMw.Wrap(http.HandlerFunc(handleListConversations(convSvc))))
+
+	// Group endpoints
+	mux.Handle("POST /v1/groups", authMw.Wrap(http.HandlerFunc(handleCreateGroup(groupSvc))))
+	mux.Handle("POST /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleAddGroupMembers(groupSvc))))
+	mux.Handle("DELETE /v1/groups/{gid}/members/{uid}", authMw.Wrap(http.HandlerFunc(handleRemoveGroupMember(groupSvc))))
+	mux.Handle("GET /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleListGroupMembers(groupSvc))))
 
 	return withLogging(mux)
 }
@@ -483,6 +498,218 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
+// ── Refresh token handler ──────────────────────────
+
+func handleRefreshToken(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.RefreshToken == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("refresh_token is required"))
+			return
+		}
+
+		// Hash the incoming token and look up device
+			h := sha256.Sum256([]byte(req.RefreshToken))
+			hash := hex.EncodeToString(h[:])
+			var userID int64
+		var deviceID string
+		err := db.QueryRowContext(r.Context(),
+			"SELECT user_id, id FROM devices WHERE refresh_token_hash=$1", hash,
+		).Scan(&userID, &deviceID)
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusUnauthorized, errorResponse("invalid refresh token"))
+			return
+		}
+		if err != nil {
+			slog.Error("refresh token lookup", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		// Issue new tokens (rotation)
+		accessToken, _ := authSvc.SignAccessToken(userID, deviceID)
+		newRaw, newHash, _ := auth.GenerateRefreshToken()
+
+		db.ExecContext(r.Context(),
+			"UPDATE devices SET refresh_token_hash=$1 WHERE id=$2", newHash, deviceID)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"access_token":  accessToken,
+			"refresh_token": newRaw,
+			"expires_in":    3600,
+		})
+	}
+}
+
+// ── Device management handlers ─────────────────────
+
+func handleListDevices(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		deviceID := DeviceIDFromContext(r.Context())
+
+		rows, err := db.QueryContext(r.Context(),
+			"SELECT id, platform, last_seen_at FROM devices WHERE user_id=$1 ORDER BY last_seen_at DESC",
+			userID)
+		if err != nil {
+			slog.Error("list devices", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		defer rows.Close()
+
+		type deviceInfo struct {
+			DeviceID   string    `json:"device_id"`
+			Platform   string    `json:"platform"`
+			IsCurrent  bool      `json:"is_current"`
+			LastSeenAt time.Time `json:"last_seen_at"`
+		}
+		var devices []deviceInfo
+		for rows.Next() {
+			var d deviceInfo
+			var lastSeen time.Time
+			if err := rows.Scan(&d.DeviceID, &d.Platform, &lastSeen); err != nil {
+				continue
+			}
+			d.LastSeenAt = lastSeen
+			d.IsCurrent = d.DeviceID == deviceID
+			devices = append(devices, d)
+		}
+		if devices == nil {
+			devices = make([]deviceInfo, 0)
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"devices": devices})
+	}
+}
+
+func handleRevokeDevice(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		did := r.PathValue("did")
+
+		result, err := db.ExecContext(r.Context(),
+			"DELETE FROM devices WHERE id=$1 AND user_id=$2", did, userID)
+		if err != nil {
+			slog.Error("revoke device", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			writeJSON(w, http.StatusNotFound, errorResponse("device not found"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"revoked": did})
+	}
+}
+
+// ── Group handlers ─────────────────────────────────
+
+func handleCreateGroup(svc *group.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+
+		var req struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.Name == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("name is required"))
+			return
+		}
+
+		g, err := svc.CreateGroup(r.Context(), req.Name, req.Description, userID)
+		if err != nil {
+			slog.Error("create group", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to create group"))
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, map[string]interface{}{
+			"group":   g,
+			"conversation_id": svc.GetConversationID(g.ID),
+		})
+	}
+}
+
+func handleAddGroupMembers(svc *group.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		gid := r.PathValue("gid")
+
+		var req struct {
+			UserIDs []int64 `json:"user_ids"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if len(req.UserIDs) == 0 {
+			writeJSON(w, http.StatusBadRequest, errorResponse("user_ids is required"))
+			return
+		}
+
+		if err := svc.AddMembers(r.Context(), gid, userID, req.UserIDs); err != nil {
+			switch {
+			case errors.Is(err, group.ErrNotAdmin):
+				writeJSON(w, http.StatusForbidden, errorResponse("requires admin privileges"))
+			case errors.Is(err, group.ErrGroupFull):
+				writeJSON(w, http.StatusConflict, errorResponse("group is full"))
+			case errors.Is(err, group.ErrAlreadyMember):
+				writeJSON(w, http.StatusConflict, errorResponse("user already a member"))
+			default:
+				slog.Error("add members", "error", err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse("failed to add members"))
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"added": len(req.UserIDs)})
+	}
+}
+
+func handleRemoveGroupMember(svc *group.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		gid := r.PathValue("gid")
+		uidStr := r.PathValue("uid")
+		targetUID, _ := strconv.ParseInt(uidStr, 10, 64)
+
+		if err := svc.RemoveMember(r.Context(), gid, userID, targetUID); err != nil {
+			switch {
+			case errors.Is(err, group.ErrNotAdmin):
+				writeJSON(w, http.StatusForbidden, errorResponse("requires admin privileges"))
+			case errors.Is(err, group.ErrCannotRemoveOwner):
+				writeJSON(w, http.StatusConflict, errorResponse("cannot remove the group owner"))
+			case errors.Is(err, group.ErrNotMember):
+				writeJSON(w, http.StatusNotFound, errorResponse("user is not a member"))
+			default:
+				slog.Error("remove member", "error", err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse("failed to remove member"))
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"removed": targetUID})
+	}
+}
+
+func handleListGroupMembers(svc *group.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		gid := r.PathValue("gid")
+		members, err := svc.GetMembers(r.Context(), gid)
+		if err != nil {
+			slog.Error("list members", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"members": members})
+	}
+}
+
+
+
+
 
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
