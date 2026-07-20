@@ -50,6 +50,7 @@ livechat-server/
 `livechat-server` 的构建、启动、测试、Phase 1 验证状态已单独迁移到：
 
 - [docs/build-and-test.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/build-and-test.md)
+- [docs/阶段性实现介绍.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/阶段性实现介绍.md)
 
 该文档包含：
 
@@ -58,6 +59,7 @@ livechat-server/
 - 运行时健康检查
 - `./scripts/phase1-smoke.sh` 验证回路
 - Phase 1 当前交付结论
+- 当前阶段的实现方案、已实现能力与关键技术决策
 
 ## API 文档
 
@@ -87,7 +89,7 @@ curl -s -X POST http://localhost:8080/v1/auth/register \
 ```
 
 - 首次注册自动创建 user
-- 已注册手机号重复注册返回已有 user
+- 已注册手机号重复注册返回 `409 conflict`
 - P0 阶段：验证码为 mock，接受任意 6 位数字
 
 #### POST /v1/auth/login — 登录

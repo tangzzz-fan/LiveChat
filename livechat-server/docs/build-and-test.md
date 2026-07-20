@@ -20,13 +20,27 @@
 适用于本机已经启动 PostgreSQL 和 Redis 的情况。
 
 ```bash
-psql -h localhost -U livechat -d livechat -c 'select 1;'
+PGPASSWORD=livechat psql -h localhost -U livechat -d livechat -c 'select 1;'
 redis-cli -h localhost -p 6379 ping
 make migrate-up
+```
+
+然后分别在 3 个独立终端中启动：
+
+```bash
 make run-message-service
 make run-gateway
 make run-outbox-consumer
 ```
+
+本次实测结果：
+
+- `PGPASSWORD=livechat psql -h localhost -U livechat -d livechat -c 'select 1;'`：通过
+- `redis-cli -h localhost -p 6379 ping`：返回 `PONG`
+- `make migrate-up`：通过，当前输出为 `all migrations complete`
+- `make run-message-service`：通过，监听 `:8080` 和 gRPC `:9090`
+- `make run-gateway`：通过，监听 `:8081` 和 gRPC `:9091`
+- `make run-outbox-consumer`：通过，启动 worker pool，并暴露 metrics `:8082`
 
 ### 模式 B：Docker 模式
 
@@ -79,6 +93,7 @@ make test
 curl http://localhost:8080/health
 curl http://localhost:8080/metrics
 curl http://localhost:8081/health
+curl http://localhost:8082/metrics
 ```
 
 预期：
@@ -86,6 +101,7 @@ curl http://localhost:8081/health
 - `message-service` 返回 PostgreSQL 和 Redis 状态
 - `message-service` 暴露 Prometheus 格式指标
 - `gateway` 返回 `active_sessions`
+- `outbox-consumer` 暴露 `outbox_pending_count`、`outbox_processing_count`、`outbox_failed_count`
 
 ## Phase 1 验证回路
 
