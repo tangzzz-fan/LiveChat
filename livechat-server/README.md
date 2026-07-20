@@ -341,6 +341,164 @@ curl -s "http://localhost:8080/v1/conversations/conv-1/messages?from_seq=1" -H "
 # → 应返回 A 发送的消息
 ```
 
+## Phase 2 功能验证命令
+
+以下命令用于验证 Phase 2 新增功能的端到端行为。执行前需确保：
+
+```bash
+# 一键启动所有服务
+./scripts/setup.sh --start
+```
+
+### 快速环境初始化（所有测试共用）
+
+```bash
+RESP_A=$(curl -s -X POST http://localhost:8080/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"phone_e164":"+8613800000001","verification_code":"123456","device_id":"ios-A","platform":"ios"}')
+TOKEN_A=$(echo "$RESP_A" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+UID_A=$(echo "$RESP_A" | python3 -c 'import sys,json; print(json.load(sys.stdin)["user_id"])')
+
+RESP_B=$(curl -s -X POST http://localhost:8080/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"phone_e164":"+8613800000002","verification_code":"123456","device_id":"android-B","platform":"android"}')
+TOKEN_B=$(echo "$RESP_B" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+UID_B=$(echo "$RESP_B" | python3 -c 'import sys,json; print(json.load(sys.stdin)["user_id"])')
+
+psql -U livechat livechat -c "INSERT INTO conversations (id, type) VALUES ('conv-1', 'direct') ON CONFLICT DO NOTHING;"
+psql -U livechat livechat -c "INSERT INTO conversation_members (conversation_id, user_id) VALUES ('conv-1', $UID_A), ('conv-1', $UID_B) ON CONFLICT DO NOTHING;"
+
+echo "UID_A=$UID_A  UID_B=$UID_B"
+```
+
+### 0010: Refresh Token 轮换
+
+```bash
+REFRESH=$(curl -s -X POST http://localhost:8080/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"phone_e164":"+8613800000003","verification_code":"123456","device_id":"dev-refresh","platform":"ios"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["refresh_token"])')
+
+echo "refresh_token: $REFRESH"
+
+curl -s -X POST http://localhost:8080/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh_token\": \"$REFRESH\"}" | python3 -m json.tool
+# 应返回新的 access_token + refresh_token（轮换后旧 token 失效）
+```
+
+### 0011: 设备列表与吊销
+
+```bash
+# 查看设备列表
+curl -s "http://localhost:8080/v1/devices" \
+  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
+# 应返回 devices 数组，is_current=true
+
+# 吊销设备
+curl -s -X POST "http://localhost:8080/v1/devices/ios-A/revoke" \
+  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
+# 应返回 {"revoked":"ios-A"}
+```
+
+### 0012/0013: 群聊创建与成员管理
+
+```bash
+# 创建群
+GRESP=$(curl -s -X POST http://localhost:8080/v1/groups \
+  -H "Authorization: Bearer $TOKEN_A" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"测试群聊","description":"Phase 2 验证"}')
+echo "$GRESP" | python3 -m json.tool
+
+GID=$(echo "$GRESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["group"]["id"])')
+CID=$(echo "$GRESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["conversation_id"])')
+echo "Group: $GID, Conv: $CID"
+
+# 加人
+curl -s -X POST "http://localhost:8080/v1/groups/$GID/members" \
+  -H "Authorization: Bearer $TOKEN_A" \
+  -H 'Content-Type: application/json' \
+  -d "{\"user_ids\": [$UID_B]}" | python3 -m json.tool
+# 应返回 {"added":1}
+
+# 查看成员
+curl -s "http://localhost:8080/v1/groups/$GID/members" \
+  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
+# 应含 owner (UID_A) 和 member (UID_B)
+
+# 踢人
+curl -s -X DELETE "http://localhost:8080/v1/groups/$GID/members/$UID_B" \
+  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
+# 应返回 {"removed":<UID_B>}
+```
+
+### 0006/0016: 群聊消息 + 同步验证
+
+```bash
+# 重新加 B 入群（如果上面已踢出）
+curl -s -X POST "http://localhost:8080/v1/groups/$GID/members" \
+  -H "Authorization: Bearer $TOKEN_A" \
+  -H 'Content-Type: application/json' \
+  -d "{\"user_ids\": [$UID_B]}" > /dev/null
+
+# A 在群聊中发消息
+curl -s -X POST http://localhost:8080/v1/messages/send \
+  -H "Authorization: Bearer $TOKEN_A" \
+  -H 'Content-Type: application/json' \
+  -d "{\"client_message_id\":\"group-msg-1\",\"conversation_id\":\"$CID\",\"message_type\":\"text\",\"content\":\"{\\\"text\\\":\\\"大家好\\\"}\"}" \
+  | python3 -m json.tool
+# 应返回 server_message_id + conversation_seq
+
+# B 拉取群聊消息
+curl -s "http://localhost:8080/v1/conversations/$CID/messages?from_seq=1" \
+  -H "Authorization: Bearer $TOKEN_B" | python3 -m json.tool
+# 应看到 A 的消息
+
+# B 查看同步事件
+curl -s "http://localhost:8080/v1/sync/events?cursor=0" \
+  -H "Authorization: Bearer $TOKEN_B" | python3 -m json.tool
+# 应含 message_created 事件
+```
+
+### 权限拒绝验证
+
+```bash
+# 第三人非群成员
+TOKEN_C=$(curl -s -X POST http://localhost:8080/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"phone_e164":"+8613800000005","verification_code":"123456","device_id":"ios-C","platform":"ios"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+
+# 非成员发消息 → 403
+curl -s -X POST http://localhost:8080/v1/messages/send \
+  -H "Authorization: Bearer $TOKEN_C" \
+  -H 'Content-Type: application/json' \
+  -d "{\"client_message_id\":\"bad\",\"conversation_id\":\"$CID\",\"message_type\":\"text\",\"content\":\"{}\"}" \
+  | python3 -m json.tool
+# 应返回 403
+
+# 非成员读消息 → 403
+curl -s "http://localhost:8080/v1/conversations/$CID/messages?from_seq=1" \
+  -H "Authorization: Bearer $TOKEN_C" | python3 -m json.tool
+# 应返回 403
+```
+
+### 幂等性验证
+
+```bash
+for i in 1 2; do
+  echo "=== 第 $i 次 ==="
+  curl -s -X POST http://localhost:8080/v1/messages/send \
+    -H "Authorization: Bearer $TOKEN_A" \
+    -H 'Content-Type: application/json' \
+    -d "{\"client_message_id\":\"idem-test\",\"conversation_id\":\"conv-1\",\"message_type\":\"text\",\"content\":\"{\\\"text\\\":\\\"幂等\\\"}\"}" \
+    | python3 -m json.tool
+done
+# 第 1 次: is_duplicate=false
+# 第 2 次: is_duplicate=true
+```
+
 ## 数据库表速查
 
 | 表 | 用途 | 关键约束 |
