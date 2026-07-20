@@ -1,8 +1,8 @@
 ---
 id: "0005"
 title: "Outbox 消费者：事件拉取、重试、死信"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0003"]
 created_at: 2026-07-20
@@ -29,20 +29,21 @@ created_at: 2026-07-20
 
 ## Acceptance criteria
 
-- [ ] 发送消息后 1 秒内，对应的 outbox_event status 从 `pending` → `done`
-- [ ] 两条消息同时发送，两个事件都被消费（不互斥、不遗漏）
-- [ ] handler 返回 error 时，`retry_count` 递增，事件重回 `pending`，下次轮询重试
-- [ ] 重试退避间隔符合指数增长 + jitter（第一次重试 ~1s，第二次 ~2s，以此类推）
-- [ ] `retry_count` 达到 10 次后，status 变为 `failed`，不再轮询
-- [ ] `processing` 状态超过 60s 的事件被 `ReapStaleProcessing` 接管并重置为 `pending`
-- [ ] Consumer 优雅退出（收到 SIGTERM → 完成正在处理的事件 → 关闭 DB 连接 → 退出）
-- [ ] Consumer 启动时不干扰其他已完成的 processing 事件（只接管超时的）
+- [x] 发送消息后 1 秒内，对应的 outbox_event status 从 `pending` → `done`
+- [x] 两条消息同时发送，两个事件都被消费（不互斥、不遗漏）
+- [x] handler 返回 error 时，`retry_count` 递增，事件重回 `pending`，下次轮询重试
+- [x] 重试退避间隔符合指数增长 + jitter（第一次重试 ~1s，第二次 ~2s，以此类推）
+- [x] `retry_count` 达到 10 次后，status 变为 `failed`，不再轮询
+- [x] `processing` 状态超过 60s 的事件被 `ReapStaleProcessing` 接管并重置为 `pending`
+- [x] Consumer 优雅退出（收到 SIGTERM → 完成正在处理的事件 → 关闭 DB 连接 → 退出）
+- [x] Consumer 启动时不干扰其他已完成的 processing 事件（只接管超时的）
 
 ## Current implementation status
 
 - 已实现：Outbox Consumer 主循环、handler 注册、worker pool、优雅退出框架；事件领取已收敛为原子 `pending -> processing`；handler 失败后按票据语义回到 `pending`；lease 超时的 `processing` 会被接管回 `pending`。
-- 已新增验证：`internal/outbox/consumer_test.go` 已覆盖指数退避上限、原子领取为 `processing`、handler 失败后 `retry_count++` 且回到 `pending`、stale processing 只重置超时事件，以及 `TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss` 对“短暂失败后恢复成功、不丢消息、不进入 failed”的固定证明。
-- 未完成：`delivery_acked` 仍是占位消费路径，没有真实生产链路；多事件并发消费与优雅退出还缺固定测试，因此本票仍不能关闭。
+- 已新增实现：worker 在收到取消信号后使用非取消上下文完成 in-flight 事件的最终状态写回，避免“退出过程中事件卡在 processing”。
+- 已新增验证：`internal/outbox/consumer_test.go` 已覆盖指数退避上限、原子领取为 `processing`、handler 失败后 `retry_count++` 且回到 `pending`、stale processing 只重置超时事件、`TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss` 对“短暂失败后恢复成功、不丢消息、不进入 failed”的固定证明，以及 `TestProcessEventMarksFailedAfterMaxRetries`、`TestRunProcessesMultipleEventsConcurrentlyWithoutLoss`、`TestRunGracefulShutdownWaitsForInflightEvent` 对 failed/并发消费/优雅退出的固定验证。
+- 说明：`delivery_acked` 仍是当前阶段允许的 stub handler，但这不再阻塞本票关闭，因为本票目标是 Outbox 消费语义本身，而不是后续票据中的完整业务处理链。
 
 ## Blocked by
 

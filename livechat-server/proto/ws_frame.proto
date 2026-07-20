@@ -56,6 +56,12 @@ message ErrorFrame {
     bool   should_reconnect = 3;
 }
 
+message DisconnectFrame {
+    uint32 code = 1;
+    string reason = 2;
+    bool should_reconnect = 3;
+}
+
 // ── Message delivery (0x1000 - 0x1FFF) ─────────────
 
 message WsMessageDelivery {

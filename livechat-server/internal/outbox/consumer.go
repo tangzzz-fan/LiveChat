@@ -90,12 +90,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 	// Start workers
 	events := make(chan Event, c.cfg.BatchSize)
 	var wg sync.WaitGroup
+	workerCtx := context.WithoutCancel(ctx)
 	for i := 0; i < c.cfg.WorkerCount; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			for event := range events {
-				c.processEvent(ctx, workerID, event)
+				c.processEvent(workerCtx, workerID, event)
 			}
 		}(i)
 	}

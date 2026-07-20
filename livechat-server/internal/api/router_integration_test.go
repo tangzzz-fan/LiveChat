@@ -213,6 +213,87 @@ func TestListConversationsRequiresAuth(t *testing.T) {
 	}
 }
 
+func TestLoginReturnsJWTAndAllowsProtectedEndpoint(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-login")
+
+	register := doJSONRequest(t, router, http.MethodPost, "/v1/auth/register", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         "bootstrap-" + deviceID,
+		"platform":          "ios",
+	}, "")
+	if register.Code != http.StatusCreated {
+		t.Fatalf("expected register 201, got %d: %s", register.Code, register.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{"bootstrap-" + deviceID, deviceID})
+	})
+
+	login := doJSONRequest(t, router, http.MethodPost, "/v1/auth/login", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "654321",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("expected login 200, got %d: %s", login.Code, login.Body.String())
+	}
+
+	var loginResp struct {
+		AccessToken string `json:"access_token"`
+		UserID      int64  `json:"user_id"`
+	}
+	if err := json.NewDecoder(login.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if loginResp.AccessToken == "" {
+		t.Fatalf("expected login access_token")
+	}
+	if loginResp.UserID != userID {
+		t.Fatalf("expected login user_id %d, got %d", userID, loginResp.UserID)
+	}
+
+	protected := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, loginResp.AccessToken)
+	if protected.Code != http.StatusOK {
+		t.Fatalf("expected protected devices endpoint 200, got %d: %s", protected.Code, protected.Body.String())
+	}
+}
+
+func TestHealthReturnsPostgresAndRedisStatus(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	rec := doJSONRequest(t, router, http.MethodGet, "/health", nil, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected health 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Status  string            `json:"status"`
+		Details map[string]string `json:"details"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if resp.Status != "ok" {
+		t.Fatalf("expected health status ok, got %s", resp.Status)
+	}
+	if resp.Details["postgres"] != "ok" {
+		t.Fatalf("expected postgres health ok, got %s", resp.Details["postgres"])
+	}
+	if resp.Details["redis"] != "ok" {
+		t.Fatalf("expected redis health ok, got %s", resp.Details["redis"])
+	}
+}
+
 func TestGetSyncEventsEndpointReturnsEventsLatestSeqAndUpdatesCursor(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
@@ -345,6 +426,149 @@ func TestGetSyncEventsEndpointPaginatesAndCursorOnlyMovesForward(t *testing.T) {
 		t.Fatalf("expected replayed old cursor request 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	assertSyncCursor(t, db, userID, deviceID, seeded[2])
+}
+
+func TestGetSyncEventsEndpointSupports150EventPagination(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	const deviceID = "ios-sync-150"
+	userID := uniqueUserID(t, 43)
+	ensureAPIUsers(t, db, []apiUserSeed{{userID: userID, displayName: "sync-user"}})
+	t.Cleanup(func() { cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID}) })
+
+	token, err := authSvc.SignAccessToken(userID, deviceID)
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	seeded := seedAPISyncEvents(t, db, userID, "conv-sync-150", 150)
+
+	rec := doJSONRequest(t, router, http.MethodGet, "/v1/sync/events?cursor=0&limit=100", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected first 150-page response 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var page1 struct {
+		Events []struct {
+			EventSeq int64 `json:"event_seq"`
+		} `json:"events"`
+		HasMore bool `json:"has_more"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&page1); err != nil {
+		t.Fatalf("decode first 150-page response: %v", err)
+	}
+	if len(page1.Events) != 100 {
+		t.Fatalf("expected first page size 100, got %d", len(page1.Events))
+	}
+	if !page1.HasMore {
+		t.Fatalf("expected first page has_more=true for 150 events")
+	}
+
+	lastSeqPage1 := page1.Events[len(page1.Events)-1].EventSeq
+	rec = doJSONRequest(t, router, http.MethodGet, fmt.Sprintf("/v1/sync/events?cursor=%d&limit=100", lastSeqPage1), nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected second 150-page response 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var page2 struct {
+		Events []struct {
+			EventSeq int64 `json:"event_seq"`
+		} `json:"events"`
+		HasMore bool `json:"has_more"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&page2); err != nil {
+		t.Fatalf("decode second 150-page response: %v", err)
+	}
+	if len(page2.Events) != 50 {
+		t.Fatalf("expected second page size 50, got %d", len(page2.Events))
+	}
+	if page2.HasMore {
+		t.Fatalf("expected second page has_more=false for 150 events")
+	}
+	if page2.Events[len(page2.Events)-1].EventSeq != seeded[len(seeded)-1] {
+		t.Fatalf("expected final event seq %d, got %d", seeded[len(seeded)-1], page2.Events[len(page2.Events)-1].EventSeq)
+	}
+	assertSyncCursor(t, db, userID, deviceID, seeded[len(seeded)-1])
+}
+
+func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	convID := uniqueConversationID(t, "gap-recovery")
+	userA := uniqueUserID(t, 51)
+	userB := uniqueUserID(t, 52)
+	seedAPIDirectConversation(t, db, convID, []apiUserSeed{
+		{userID: userA, displayName: "A"},
+		{userID: userB, displayName: "B"},
+	})
+	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB}) })
+	seedConversationMessages(t, db, convID, userA, "ios-a", []int64{1, 2, 3})
+
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	rec := doJSONRequest(t, router, http.MethodGet, "/v1/conversations/"+convID+"/messages?from_seq=2&limit=2", nil, tokenA)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected messages pull 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Messages []struct {
+			ConversationSeq int64  `json:"conversation_seq"`
+			ServerMessageID string `json:"server_message_id"`
+		} `json:"messages"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode messages response: %v", err)
+	}
+	if len(resp.Messages) != 2 {
+		t.Fatalf("expected 2 messages from gap recovery pull, got %d", len(resp.Messages))
+	}
+	if resp.Messages[0].ConversationSeq != 2 || resp.Messages[1].ConversationSeq != 3 {
+		t.Fatalf("expected ordered seq 2,3 got %+v", resp.Messages)
+	}
+}
+
+func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	convID := uniqueConversationID(t, "gap-errors")
+	userA := uniqueUserID(t, 61)
+	userB := uniqueUserID(t, 62)
+	userC := uniqueUserID(t, 63)
+	seedAPIDirectConversation(t, db, convID, []apiUserSeed{
+		{userID: userA, displayName: "A"},
+		{userID: userB, displayName: "B"},
+	})
+	ensureAPIUsers(t, db, []apiUserSeed{{userID: userC, displayName: "C"}})
+	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB, userC}) })
+
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	if err != nil {
+		t.Fatalf("SignAccessToken userA: %v", err)
+	}
+	tokenC, err := authSvc.SignAccessToken(userC, "ios-c")
+	if err != nil {
+		t.Fatalf("SignAccessToken userC: %v", err)
+	}
+
+	rec := doJSONRequest(t, router, http.MethodGet, "/v1/conversations/"+convID+"/messages?from_seq=bad", nil, tokenA)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad from_seq 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSONRequest(t, router, http.MethodGet, "/v1/conversations/"+convID+"/messages?from_seq=1", nil, tokenC)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected non-member messages pull 403, got %d: %s", rec.Code, rec.Body.String())
+	}
 }
 
 func openAPITestDB(t *testing.T) *sql.DB {
@@ -606,6 +830,22 @@ func assertSyncCursor(t *testing.T, db *sql.DB, userID int64, deviceID string, w
 	}
 	if got != want {
 		t.Fatalf("user %d device %s: want cursor %d, got %d", userID, deviceID, want, got)
+	}
+}
+
+func seedConversationMessages(t *testing.T, db *sql.DB, conversationID string, senderUserID int64, senderDeviceID string, seqs []int64) {
+	t.Helper()
+	for _, seq := range seqs {
+		serverMessageID := fmt.Sprintf("msg-%s-%d", conversationID, seq)
+		clientMessageID := fmt.Sprintf("client-%s-%d", conversationID, seq)
+		content := fmt.Sprintf(`{"text":"message-%d"}`, seq)
+		mustExecAPI(t, db,
+			`INSERT INTO messages (
+				server_message_id, conversation_id, conversation_seq, sender_user_id,
+				sender_device_id, client_message_id, message_type, content, server_received_at
+			) VALUES ($1, $2, $3, $4, $5, $6, 'text', $7::jsonb, NOW())`,
+			serverMessageID, conversationID, seq, senderUserID, senderDeviceID, clientMessageID, content,
+		)
 	}
 }
 

@@ -1,8 +1,8 @@
 ---
 id: "0007"
 title: "离线同步：增量事件 API + 游标管理 + 序号缺口检测"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0005"]
 created_at: 2026-07-20
@@ -29,20 +29,20 @@ created_at: 2026-07-20
 
 ## Acceptance criteria
 
-- [ ] 设备离线期间产生了 3 条 sync_events → `GET /v1/sync/events?cursor=0` 返回这 3 条事件，每条含 `event_seq`、`event_type`、`payload`
-- [ ] `has_more=false` 且 `latest_event_seq` = 全局最新序号
-- [ ] `GET /v1/sync/events?cursor=N` 只返回 `event_seq > N` 的事件
-- [ ] 分页：总共 150 条事件，limit=100 → 第一页 `has_more=true`，第二页 `has_more=false`
-- [ ] 手shake响应中 `latest_event_seq` 大于本地 cursor 时，系统识别到有离线消息待同步
-- [ ] sync_cursors 表在每次同步完成后更新 `last_event_seq`
-- [ ] 单端多次离线→上线→同步，cursor 持续正确前进
+- [x] 设备离线期间产生了 3 条 sync_events → `GET /v1/sync/events?cursor=0` 返回这 3 条事件，每条含 `event_seq`、`event_type`、`payload`
+- [x] `has_more=false` 且 `latest_event_seq` = 全局最新序号
+- [x] `GET /v1/sync/events?cursor=N` 只返回 `event_seq > N` 的事件
+- [x] 分页：总共 150 条事件，limit=100 → 第一页 `has_more=true`，第二页 `has_more=false`
+- [x] 手shake响应中 `latest_event_seq` 大于本地 cursor 时，系统识别到有离线消息待同步
+- [x] sync_cursors 表在每次同步完成后更新 `last_event_seq`
+- [x] 单端多次离线→上线→同步，cursor 持续正确前进
 
 ## Current implementation status
 
 - 已实现：`sync_events` 写入、`GET /v1/sync/events`、`sync_cursors` 更新、基于 `cursor` 的增量查询、离线补拉基础路径，以及 Gateway 握手响应中的 `latest_event_seq` 联动。
 - 已验证：`./scripts/phase1-smoke.sh` 已确认接收方可以通过同步 API 看到 `message_created` 事件。
-- 已新增验证：Gateway 握手测试现在会断言 `HandshakeResponse.latest_event_seq` 来自同步事件提供者；`internal/sync/service_test.go` 已覆盖分页读取、`latest_event_seq` 返回、`cursor` 只前进不回退；`internal/api/router_integration_test.go` 已固定覆盖 `GET /v1/sync/events` 在 `cursor=0` 时返回事件 + `latest_event_seq`、分页 `has_more`、以及 handler 对 `sync_cursors` 的回写和单调前进。
-- 未完成：序号缺口恢复仍未形成专门实现与固定验收，因此本票仍处于进行中。
+- 已新增验证：Gateway 握手测试现在会断言 `HandshakeResponse.latest_event_seq` 来自同步事件提供者；`internal/sync/service_test.go` 已覆盖分页读取、`latest_event_seq` 返回、`cursor` 只前进不回退；`internal/api/router_integration_test.go` 已固定覆盖 `GET /v1/sync/events` 在 `cursor=0` 时返回事件 + `latest_event_seq`、分页 `has_more`、150/100 分页窗口、以及 handler 对 `sync_cursors` 的回写和单调前进。
+- 已新增验证：`GET /v1/conversations/{cid}/messages?from_seq=N` 已通过固定 HTTP 测试覆盖“按 `conversation_seq` 升序补拉缺口消息”与“非成员/坏游标被拒绝”，因此本票所要求的服务端序号缺口恢复支持已经具备。
 
 ## Blocked by
 

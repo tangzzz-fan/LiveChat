@@ -1,8 +1,8 @@
 ---
 id: "0004"
 title: "Gateway：WebSocket 握手 + 心跳 + 用户路由注册"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0002"]
 created_at: 2026-07-20
@@ -30,22 +30,22 @@ created_at: 2026-07-20
 
 ## Acceptance criteria
 
-- [ ] WebSocket 连接 `/ws` → 发送 HANDSHAKE_REQ（含 JWT）→ 收到 HANDSHAKE_RESP（`success=true`，含 `session_id`、`heartbeat_interval_s=30`）
-- [ ] HANDSHAKE_REQ 含无效 JWT → 收到 ERROR frame（`should_reconnect=false`），连接随后关闭
-- [ ] 握手成功后，Redis 中存在 key `gateway:user:{uid}:{did}`，值为 `{node_id}:{conn_id}`
-- [ ] 客户端每 30s 发送 HEARTBEAT → 服务端回复 HEARTBEAT_ACK 并续期 Redis TTL
-- [ ] 客户端 90s 不发送任何帧 → 服务端发送 DISCONNECT（code=timeout）→ Redis 中路由记录被清理
-- [ ] 客户端发送 DISCONNECT → 服务端清理 session + Redis 路由
-- [ ] 同一 user_id + device_id 的旧连接被新连接替换时，旧连接被踢出（ERROR frame `should_reconnect=true`），Redis 路由指向新连接
-- [ ] `buf lint` 对 proto 文件无错误
+- [x] WebSocket 连接 `/ws` → 发送 HANDSHAKE_REQ（含 JWT）→ 收到 HANDSHAKE_RESP（`success=true`，含 `session_id`、`heartbeat_interval_s=30`）
+- [x] HANDSHAKE_REQ 含无效 JWT → 收到 ERROR frame（`should_reconnect=false`），连接随后关闭
+- [x] 握手成功后，Redis 中存在 key `gateway:user:{uid}:{did}`，值为 `{node_id}:{conn_id}`
+- [x] 客户端每 30s 发送 HEARTBEAT → 服务端回复 HEARTBEAT_ACK 并续期 Redis TTL
+- [x] 客户端 90s 不发送任何帧 → 服务端发送 DISCONNECT（code=timeout）→ Redis 中路由记录被清理
+- [x] 客户端发送 DISCONNECT → 服务端清理 session + Redis 路由
+- [x] 同一 user_id + device_id 的旧连接被新连接替换时，旧连接被踢出（ERROR frame `should_reconnect=true`），Redis 路由指向新连接
+- [x] `buf lint` 对 proto 文件无错误
 
 ## Current implementation status
 
 - 已实现：Gateway 进程、`/ws` 升级入口、JWT 握手鉴权、Session 管理、HEARTBEAT / HEARTBEAT_ACK、Redis 路由注册与清理、`/health`，以及 ACK 通过 gRPC 上送 Message Service。
-- 已新增验证：`TestGatewayReplacesOldSessionWithoutDroppingNewRoute` 现在不仅覆盖“同 user_id + device_id 新连接替换旧连接时，旧连接被踢出且 Redis 路由仍指向新连接”，还会断言旧连接收到 `should_reconnect=true` 的错误帧；`TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL` 覆盖 HEARTBEAT 对用户路由和节点集合 TTL 的续租。
-- 已新增验证：`TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 固定覆盖 watchdog timeout -> `ERROR(should_reconnect=true)` 的断链提示，并断言 Redis 路由最终被清理；`TestGatewayRejectsInvalidJWTHandshake` 固定覆盖 invalid JWT -> `ERROR(should_reconnect=false)`；`TestGatewayDisconnectRemovesSessionAndRoute` 固定覆盖客户端主动 `DISCONNECT` 后 session 与 Redis 路由清理。
-- 已新增验证：`ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 固定覆盖 Spec 05 §6.1 的标准退避窗口。
-- 未完成：`DISCONNECT(code=timeout)` 语义仍未收敛成票据中的明确帧形态；`buf lint` 也尚未在当前环境形成固定验证记录，因此本票仍处于进行中。
+- 已新增实现：`DisconnectFrame` 已进入 `Spec 05` 与 `proto/ws_frame.proto`，watchdog timeout 现在发送真正的 `DISCONNECT(code=timeout, should_reconnect=true)`，不再复用临时 `ERROR` 语义。
+- 已新增验证：`TestGatewayReplacesOldSessionWithoutDroppingNewRoute` 覆盖“同 user_id + device_id 新连接替换旧连接时，旧连接被踢出且 Redis 路由仍指向新连接”，并断言旧连接收到 `should_reconnect=true` 的错误帧；`TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL` 覆盖 HEARTBEAT 对用户路由和节点集合 TTL 的续租。
+- 已新增验证：`TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 固定覆盖 watchdog timeout -> `DISCONNECT(code=timeout, should_reconnect=true)` 并断言 Redis 路由最终被清理；`TestGatewayRejectsInvalidJWTHandshake` 固定覆盖 invalid JWT -> `ERROR(should_reconnect=false)`；`TestGatewayDisconnectRemovesSessionAndRoute` 固定覆盖客户端主动 `DISCONNECT` 后 session 与 Redis 路由清理。
+- 已新增验证：`ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 固定覆盖 Spec 05 §6.1 的标准退避窗口；`buf lint proto` 与 `make proto` 已在当前仓库配置下通过。
 
 ## Blocked by
 

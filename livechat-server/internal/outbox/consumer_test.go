@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -202,6 +203,164 @@ func TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss(t *testing.T) {
 	}
 }
 
+func TestProcessEventMarksFailedAfterMaxRetries(t *testing.T) {
+	db := openOutboxTestDB(t)
+	ctx := context.Background()
+
+	id := seedOutboxEvent(t, db, "processing", 0, time.Now())
+	t.Cleanup(func() { cleanupOutboxEvent(t, db, id) })
+
+	consumer := NewConsumer(db, Config{MaxRetries: 1})
+	consumer.RegisterHandler("message_created", func(context.Context, Event) error {
+		return errors.New("permanent failure")
+	})
+
+	consumer.processEvent(ctx, 0, Event{
+		ID:            id,
+		AggregateType: "message",
+		AggregateID:   "agg-1",
+		EventType:     "message_created",
+		Status:        "processing",
+		RetryCount:    0,
+	})
+
+	var status string
+	var retryCount int
+	if err := db.QueryRowContext(ctx,
+		`SELECT status, retry_count FROM outbox_events WHERE id=$1`,
+		id,
+	).Scan(&status, &retryCount); err != nil {
+		t.Fatalf("query failed event: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("expected status failed after max retries, got %s", status)
+	}
+	if retryCount != 1 {
+		t.Fatalf("expected retry_count 1 after move to failed, got %d", retryCount)
+	}
+}
+
+func TestRunProcessesMultipleEventsConcurrentlyWithoutLoss(t *testing.T) {
+	db := openOutboxTestDB(t)
+	ctx := context.Background()
+
+	firstID := seedOutboxEvent(t, db, "pending", 0, time.Now())
+	secondID := seedOutboxEvent(t, db, "pending", 0, time.Now().Add(time.Millisecond))
+	t.Cleanup(func() {
+		cleanupOutboxEvent(t, db, firstID)
+		cleanupOutboxEvent(t, db, secondID)
+	})
+
+	consumer := NewConsumer(db, Config{
+		PollInterval:     5 * time.Millisecond,
+		IdlePollInterval: 5 * time.Millisecond,
+		BatchSize:        10,
+		MaxRetries:       10,
+		WorkerCount:      2,
+		LeaseTimeout:     60 * time.Second,
+	})
+
+	started := make(chan int64, 2)
+	release := make(chan struct{})
+	var processed atomic.Int32
+	consumer.RegisterHandler("message_created", func(_ context.Context, event Event) error {
+		started <- event.ID
+		<-release
+		processed.Add(1)
+		return nil
+	})
+
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		done <- consumer.Run(runCtx)
+	}()
+
+	var seen [2]int64
+	for i := range seen {
+		select {
+		case seen[i] = <-started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected both events to start processing")
+		}
+	}
+	if (seen[0] != firstID && seen[1] != firstID) || (seen[0] != secondID && seen[1] != secondID) {
+		t.Fatalf("expected both events to be processed, got %v", seen)
+	}
+	close(release)
+	waitForOutboxCondition(t, func() bool {
+		return processed.Load() == 2 &&
+			outboxStatus(t, db, firstID) == "done" &&
+			outboxStatus(t, db, secondID) == "done"
+	})
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected consumer to stop with context.Canceled, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("consumer did not stop after cancellation")
+	}
+}
+
+func TestRunGracefulShutdownWaitsForInflightEvent(t *testing.T) {
+	db := openOutboxTestDB(t)
+	ctx := context.Background()
+
+	id := seedOutboxEvent(t, db, "pending", 0, time.Now())
+	t.Cleanup(func() { cleanupOutboxEvent(t, db, id) })
+
+	consumer := NewConsumer(db, Config{
+		PollInterval:     5 * time.Millisecond,
+		IdlePollInterval: 5 * time.Millisecond,
+		BatchSize:        10,
+		MaxRetries:       10,
+		WorkerCount:      1,
+		LeaseTimeout:     60 * time.Second,
+	})
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	consumer.RegisterHandler("message_created", func(context.Context, Event) error {
+		started <- struct{}{}
+		<-release
+		return nil
+	})
+
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		done <- consumer.Run(runCtx)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("handler did not start")
+	}
+
+	cancel()
+	time.Sleep(20 * time.Millisecond)
+	if status := outboxStatus(t, db, id); status != "processing" {
+		t.Fatalf("expected inflight event to remain processing before release, got %s", status)
+	}
+
+	close(release)
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected consumer to stop with context.Canceled, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("consumer did not stop after releasing inflight event")
+	}
+
+	assertOutboxStatus(t, db, id, "done")
+}
+
 func TestReapStaleResetsOnlyExpiredProcessingToPending(t *testing.T) {
 	db := openOutboxTestDB(t)
 	ctx := context.Background()
@@ -284,4 +443,25 @@ func assertOutboxStatus(t *testing.T, db *sql.DB, id int64, want string) {
 	if got != want {
 		t.Fatalf("event %d: want status %s, got %s", id, want, got)
 	}
+}
+
+func outboxStatus(t *testing.T, db *sql.DB, id int64) string {
+	t.Helper()
+	var got string
+	if err := db.QueryRowContext(context.Background(), `SELECT status FROM outbox_events WHERE id=$1`, id).Scan(&got); err != nil {
+		t.Fatalf("query outbox status %d: %v", id, err)
+	}
+	return got
+}
+
+func waitForOutboxCondition(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("condition not satisfied before timeout")
 }

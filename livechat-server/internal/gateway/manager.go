@@ -62,6 +62,15 @@ func (s *Session) SendError(code uint32, message string, shouldReconnect bool) {
 	})
 }
 
+// SendDisconnect sends a DisconnectFrame to the connection.
+func (s *Session) SendDisconnect(code uint32, reason string, shouldReconnect bool) {
+	_ = s.Send(OpDisconnect, &livechat.DisconnectFrame{
+		Code:            code,
+		Reason:          reason,
+		ShouldReconnect: shouldReconnect,
+	})
+}
+
 // Close closes the WebSocket connection.
 func (s *Session) Close() {
 	s.cancel()
@@ -255,6 +264,10 @@ func (m *Manager) handleFrame(sess *Session, frame *livechat.WsFrame) {
 		m.refreshRoute(sess.ctx, sess.UserID, sess.DeviceID)
 
 	case OpDisconnect:
+		disconnect := &livechat.DisconnectFrame{}
+		if len(frame.Payload) > 0 {
+			proto.Unmarshal(frame.Payload, disconnect)
+		}
 		slog.Info("client disconnect", "session_id", sess.ID)
 		sess.Close()
 
@@ -344,7 +357,7 @@ func (m *Manager) checkStale() {
 	for _, sess := range stale {
 		slog.Info("closing stale session", "session_id", sess.ID, "user_id", sess.UserID)
 		metrics.WSHeartbeatTimeouts.Add(1)
-		sess.SendError(4003, "connection timeout", true)
+		sess.SendDisconnect(4003, "connection timeout", true)
 		sess.Close()
 	}
 }

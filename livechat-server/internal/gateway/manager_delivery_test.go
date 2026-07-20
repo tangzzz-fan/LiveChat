@@ -411,7 +411,10 @@ func TestGatewayDisconnectRemovesSessionAndRoute(t *testing.T) {
 	defer conn.Close()
 	mustHandshakeGatewayConn(t, conn, accessToken, "ios-a")
 
-	disconnectFrame, err := NewFrame(OpDisconnect, &livechat.Heartbeat{})
+	disconnectFrame, err := NewFrame(OpDisconnect, &livechat.DisconnectFrame{
+		Code:   1000,
+		Reason: "client requested close",
+	})
 	if err != nil {
 		t.Fatalf("NewFrame disconnect: %v", err)
 	}
@@ -477,18 +480,21 @@ func TestGatewayWatchdogClosesStaleSessionWithReconnectHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UnmarshalFrame stale notice: %v", err)
 	}
-	if frame.Opcode != OpError {
+	if frame.Opcode != OpDisconnect {
 		t.Fatalf("unexpected stale notice opcode: %d", frame.Opcode)
 	}
-	errPayload := &livechat.ErrorFrame{}
-	if err := proto.Unmarshal(frame.Payload, errPayload); err != nil {
+	disconnectPayload := &livechat.DisconnectFrame{}
+	if err := proto.Unmarshal(frame.Payload, disconnectPayload); err != nil {
 		t.Fatalf("proto.Unmarshal stale notice: %v", err)
 	}
-	if !errPayload.GetShouldReconnect() {
+	if !disconnectPayload.GetShouldReconnect() {
 		t.Fatalf("expected stale timeout to require reconnect")
 	}
-	if errPayload.GetMessage() != "connection timeout" {
-		t.Fatalf("unexpected timeout message: %s", errPayload.GetMessage())
+	if disconnectPayload.GetReason() != "connection timeout" {
+		t.Fatalf("unexpected timeout reason: %s", disconnectPayload.GetReason())
+	}
+	if disconnectPayload.GetCode() != 4003 {
+		t.Fatalf("unexpected timeout code: %d", disconnectPayload.GetCode())
 	}
 	waitForGatewayCleanup(t, func() bool {
 		if manager.ActiveSessions() != 0 {

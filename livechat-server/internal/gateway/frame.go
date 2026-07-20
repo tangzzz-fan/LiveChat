@@ -48,6 +48,8 @@ func UnmarshalPayload(opcode uint32, data []byte) (proto.Message, error) {
 		msg = &livechat.MessageAck{}
 	case OpError:
 		msg = &livechat.ErrorFrame{}
+	case OpDisconnect:
+		msg = &livechat.DisconnectFrame{}
 	case OpMessageDelivery:
 		msg = &livechat.WsMessageDelivery{}
 	case OpSyncEvent:
