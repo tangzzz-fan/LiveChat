@@ -1,11 +1,12 @@
 ---
 id: "0006"
 title: "实时投递（Fanout）：Outbox → Gateway → WebSocket 推送"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: in_progress
+labels: ["in-progress"]
 parent: "0001"
 blocked_by: ["0004", "0005"]
 created_at: 2026-07-20
+---
 
 ## Parent
 
@@ -34,6 +35,13 @@ created_at: 2026-07-20
 - [ ] 发送方自己不在投递目标列表中（不会给自己推送 MESSAGE_DELIVERY）
 - [ ] `GET /v1/conversations/{cid}/messages?from_seq=1&limit=10` 按 conversation_seq ASC 返回最多 10 条消息
 - [ ] 会话不存在 → 404；无权限访问 → 403
+
+## Current implementation status
+
+- 已实现：`internal/fanout/service.go` 已有 conversation member 查询、在线设备扫描、同步事件写入；`GET /v1/conversations/{cid}/messages` 已可工作并被 smoke 验证。
+- 已新增：Gateway 已暴露 `GatewayDeliveryService.DeliverMessage` gRPC 服务，`outbox-consumer` 已改为通过 gRPC client 向目标 Gateway 节点投递 `WsMessageDelivery` protobuf；`DeliverToDevice()` 负责最终 WebSocket 下发。
+- 已验证：`go test ./internal/gateway -run TestGatewayDeliversPublishedMessageToConnectedDevice -count=1` 已改为覆盖 gRPC `DeliverMessage` → WebSocket `MESSAGE_DELIVERY` 路径；离线或未连接设备仍可通过 `sync_events` + 补拉接口拿到消息；发送方自己不会被加入投递目标。
+- 未完成：仍缺少覆盖 `Outbox -> Fanout -> gRPC Gateway -> WebSocket` 的固定 runbook / 进程级集成验收，因此本票仍处于进行中而非关闭。
 
 ## Blocked by
 

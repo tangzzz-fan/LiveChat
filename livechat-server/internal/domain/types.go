@@ -12,13 +12,13 @@ type User struct {
 
 // Device represents a logged-in device instance.
 type Device struct {
-	ID                string    `json:"id"`
-	UserID            int64     `json:"user_id"`
-	Platform          string    `json:"platform"`
-	PushToken         string    `json:"push_token,omitempty"`
-	RefreshTokenHash  string    `json:"-"`
-	LastSeenAt        time.Time `json:"last_seen_at"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	UserID           int64     `json:"user_id"`
+	Platform         string    `json:"platform"`
+	PushToken        string    `json:"push_token,omitempty"`
+	RefreshTokenHash string    `json:"-"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // Conversation is the logical container for messages.
@@ -59,14 +59,20 @@ type MessageReceipt struct {
 
 // ConversationSummary is a precomputed projection for the conversation list.
 type ConversationSummary struct {
-	UserID             int64     `json:"user_id"`
-	ConversationID     string    `json:"conversation_id"`
-	ConversationType   string    `json:"conversation_type"`
-	LastMessagePreview string    `json:"last_message_preview"`
-	LastMessageAt      time.Time `json:"last_message_at"`
-	UnreadCount        int       `json:"unread_count"`
-	IsPinned           bool      `json:"is_pinned"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	UserID             int64                       `json:"user_id"`
+	ConversationID     string                      `json:"conversation_id"`
+	ConversationType   string                      `json:"conversation_type"`
+	LastMessagePreview string                      `json:"last_message_preview"`
+	LastMessageAt      time.Time                   `json:"last_message_at"`
+	UnreadCount        int                         `json:"unread_count"`
+	IsPinned           bool                        `json:"is_pinned"`
+	Members            []ConversationSummaryMember `json:"members"`
+	UpdatedAt          time.Time                   `json:"updated_at"`
+}
+
+type ConversationSummaryMember struct {
+	UserID      int64  `json:"user_id"`
+	DisplayName string `json:"display_name"`
 }
 
 // OutboxEvent is persisted in the outbox_events table.
@@ -95,11 +101,11 @@ type SyncEvent struct {
 
 // SyncCursor tracks a device's consumed position in the sync stream.
 type SyncCursor struct {
-	UserID        int64     `json:"user_id"`
-	DeviceID      string    `json:"device_id"`
-	LastEventSeq  int64     `json:"last_event_seq"`
-	LastSyncAt    time.Time `json:"last_sync_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	UserID       int64     `json:"user_id"`
+	DeviceID     string    `json:"device_id"`
+	LastEventSeq int64     `json:"last_event_seq"`
+	LastSyncAt   time.Time `json:"last_sync_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ── Event type constants ────────────────────────────

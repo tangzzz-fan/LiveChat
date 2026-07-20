@@ -23,14 +23,14 @@ var upgrader = websocket.Upgrader{
 
 // Session represents an authenticated WebSocket connection.
 type Session struct {
-	ID          string
-	UserID      int64
-	DeviceID    string
-	Conn        *websocket.Conn
-	LastReadAt  time.Time
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex // guards writes
+	ID         string
+	UserID     int64
+	DeviceID   string
+	Conn       *websocket.Conn
+	LastReadAt time.Time
+	ctx        context.Context
+	cancel     context.CancelFunc
+	mu         sync.Mutex // guards writes
 }
 
 // Send writes a frame to the WebSocket connection (thread-safe).
@@ -68,6 +68,8 @@ type Manager struct {
 	authSvc *auth.Service
 	rdb     *redis.Client
 	nodeID  string
+	ackFwd  AckForwarder
+	syncSeq SyncSequenceProvider
 
 	mu       sync.RWMutex
 	sessions map[string]*Session // sessionID -> Session
@@ -85,6 +87,14 @@ func NewManager(authSvc *auth.Service, rdb *redis.Client, nodeID string, heartbe
 		heartbeatInterval: heartbeatInterval,
 		readTimeout:       readTimeout,
 	}
+}
+
+func (m *Manager) SetAckForwarder(fwd AckForwarder) {
+	m.ackFwd = fwd
+}
+
+func (m *Manager) SetSyncSequenceProvider(provider SyncSequenceProvider) {
+	m.syncSeq = provider
 }
 
 // HandleUpgrade performs WebSocket upgrade and handshake.
@@ -161,19 +171,30 @@ func (m *Manager) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	// Register route in Redis
 	m.registerRoute(ctx, userID, deviceID, sessionID)
 
+	latestEventSeq := uint64(0)
+	if m.syncSeq != nil {
+		seq, err := m.syncSeq.LatestEventSeq(ctx, userID)
+		if err != nil {
+			slog.Error("load latest event seq", "user_id", userID, "error", err)
+		} else if seq > 0 {
+			latestEventSeq = uint64(seq)
+		}
+	}
+
 	// Send handshake response
 	resp := &livechat.HandshakeResponse{
-		Success:             true,
-		SessionId:           sessionID,
-		NegotiatedVer:       ProtocolVersion,
-		ServerTimeMs:        uint64(time.Now().UnixMilli()),
-		HeartbeatIntervalS:  uint32(m.heartbeatInterval.Seconds()),
+		Success:            true,
+		SessionId:          sessionID,
+		NegotiatedVer:      ProtocolVersion,
+		ServerTimeMs:       uint64(time.Now().UnixMilli()),
+		HeartbeatIntervalS: uint32(m.heartbeatInterval.Seconds()),
+		LatestEventSeq:     latestEventSeq,
 	}
 	respFrame, _ := NewFrame(OpHandshakeResp, resp)
 	raw, _ = MarshalFrame(respFrame)
 	if err := conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
 		slog.Error("send handshake resp", "error", err)
-		m.removeSession(sessionID, userID, deviceID)
+		m.removeSession(sess)
 		return
 	}
 
@@ -186,7 +207,7 @@ func (m *Manager) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 // readLoop reads frames from a session until disconnect.
 func (m *Manager) readLoop(sess *Session) {
 	defer func() {
-		m.removeSession(sess.ID, sess.UserID, sess.DeviceID)
+		m.removeSession(sess)
 		sess.Close()
 		slog.Info("session closed", "session_id", sess.ID)
 	}()
@@ -231,7 +252,6 @@ func (m *Manager) handleFrame(sess *Session, frame *livechat.WsFrame) {
 		sess.Close()
 
 	case OpAck:
-		// ACK frames are forwarded to MessageService (to be implemented in ticket 0006/0009)
 		ackMsg := &livechat.MessageAck{}
 		if len(frame.Payload) > 0 {
 			proto.Unmarshal(frame.Payload, ackMsg)
@@ -241,6 +261,11 @@ func (m *Manager) handleFrame(sess *Session, frame *livechat.WsFrame) {
 			"ack_type", ackMsg.AckType,
 			"event_seq", ackMsg.EventSeq,
 		)
+		if m.ackFwd != nil {
+			if err := m.ackFwd.ForwardAck(sess.ctx, sess.UserID, sess.DeviceID, ackMsg); err != nil {
+				slog.Error("forward ack", "session_id", sess.ID, "error", err)
+			}
+		}
 
 	case OpReconnect:
 		// Reconnect with existing session_id — handled as a normal handshake for now
@@ -253,11 +278,16 @@ func (m *Manager) handleFrame(sess *Session, frame *livechat.WsFrame) {
 
 // ── Session management ───────────────────────────────
 
-func (m *Manager) removeSession(sessionID string, userID int64, deviceID string) {
+func (m *Manager) removeSession(sess *Session) {
 	m.mu.Lock()
-	delete(m.sessions, sessionID)
+	current, ok := m.sessions[sess.ID]
+	if ok && current == sess {
+		delete(m.sessions, sess.ID)
+	}
 	m.mu.Unlock()
-	m.unregisterRoute(context.Background(), userID, deviceID)
+	if ok && current == sess {
+		m.unregisterRoute(context.Background(), sess.UserID, sess.DeviceID)
+	}
 }
 
 // GetSession finds a session by user_id + device_id.
@@ -328,7 +358,13 @@ func (m *Manager) registerRoute(ctx context.Context, userID int64, deviceID, ses
 
 func (m *Manager) refreshRoute(ctx context.Context, userID int64, deviceID string) {
 	key := redisUserKey(userID, deviceID)
-	m.rdb.Expire(ctx, key, 300*time.Second)
+	nodeKey := redisNodeKey(m.nodeID)
+	pipe := m.rdb.Pipeline()
+	pipe.Expire(ctx, key, 300*time.Second)
+	pipe.Expire(ctx, nodeKey, 300*time.Second)
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Error("refresh route", "error", err)
+	}
 }
 
 func (m *Manager) unregisterRoute(ctx context.Context, userID int64, deviceID string) {

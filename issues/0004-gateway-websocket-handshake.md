@@ -1,8 +1,8 @@
 ---
 id: "0004"
 title: "Gateway：WebSocket 握手 + 心跳 + 用户路由注册"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: in_progress
+labels: ["in-progress"]
 parent: "0001"
 blocked_by: ["0002"]
 created_at: 2026-07-20
@@ -38,6 +38,12 @@ created_at: 2026-07-20
 - [ ] 客户端发送 DISCONNECT → 服务端清理 session + Redis 路由
 - [ ] 同一 user_id + device_id 的旧连接被新连接替换时，旧连接被踢出（ERROR frame `should_reconnect=true`），Redis 路由指向新连接
 - [ ] `buf lint` 对 proto 文件无错误
+
+## Current implementation status
+
+- 已实现：Gateway 进程、`/ws` 升级入口、JWT 握手鉴权、Session 管理、HEARTBEAT / HEARTBEAT_ACK、Redis 路由注册与清理、`/health`，以及 ACK 通过 gRPC 上送 Message Service。
+- 已新增验证：`TestGatewayReplacesOldSessionWithoutDroppingNewRoute` 覆盖“同 user_id + device_id 新连接替换旧连接时，旧连接被踢出且 Redis 路由仍指向新连接”；`TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL` 覆盖 HEARTBEAT 对用户路由和节点集合 TTL 的续租。
+- 未完成：invalid JWT、watchdog timeout -> 断链清理、客户端主动 DISCONNECT 的固定测试仍未补齐；`DISCONNECT(code=timeout)` 语义也尚未收敛成票据中的明确帧形态，因此本票仍处于进行中。
 
 ## Blocked by
 

@@ -3,17 +3,26 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/fanout"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/outbox"
-	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/receipts"
+	syncsvc "github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
+	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -53,8 +62,11 @@ func main() {
 	defer rdb.Close()
 
 	// Services
-	syncSvc := sync.NewService(db)
-	fanoutSvc := fanout.NewService(db, rdb, &logDeliverer{}, syncSvc)
+	syncSvc := syncsvc.NewService(db)
+	receiptSvc := receipts.NewService(db, syncSvc, conversations.NewService(db))
+	deliverer := newGRPCDeliverer(rdb)
+	defer deliverer.Close()
+	fanoutSvc := fanout.NewService(db, rdb, deliverer, syncSvc)
 
 	consumer := outbox.NewConsumer(db, outbox.Config{
 		PollInterval:     100 * time.Millisecond,
@@ -85,8 +97,11 @@ func main() {
 	})
 
 	consumer.RegisterHandler("read_receipt", func(ctx context.Context, event outbox.Event) error {
-		slog.Info("read receipt", "aggregate_id", event.AggregateID)
-		return nil
+		var payload receipts.ReadReceiptPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Errorf("unmarshal read receipt payload: %w", err)
+		}
+		return receiptSvc.ConsumeReadReceipt(ctx, payload)
 	})
 
 	slog.Info("outbox-consumer starting")
@@ -97,19 +112,100 @@ func main() {
 	slog.Info("outbox-consumer stopped")
 }
 
-// logDeliverer logs delivery instead of gRPC to Gateway (for now).
-// In production, this would call Gateway via gRPC.
-type logDeliverer struct{}
+type grpcDeliverer struct {
+	rdb   *redis.Client
+	mu    sync.Mutex
+	conns map[string]*grpc.ClientConn
+}
 
-func (d *logDeliverer) DeliverMessage(ctx context.Context, userID int64, deviceID string, payload *fanout.DeliveryPayload) error {
-	slog.Info("message delivered",
-		"user_id", userID,
-		"device_id", deviceID,
-		"server_message_id", payload.ServerMessageID,
-		"conversation_id", payload.ConversationID,
-		"conversation_seq", payload.ConversationSeq,
-	)
-	return nil
+func newGRPCDeliverer(rdb *redis.Client) *grpcDeliverer {
+	return &grpcDeliverer{
+		rdb:   rdb,
+		conns: make(map[string]*grpc.ClientConn),
+	}
+}
+
+func (d *grpcDeliverer) DeliverMessage(ctx context.Context, userID int64, deviceID string, payload *fanout.DeliveryPayload) error {
+	route, err := d.rdb.Get(ctx, redisUserKey(userID, deviceID)).Result()
+	if err != nil {
+		return err
+	}
+	nodeID, _, ok := splitRoute(route)
+	if !ok {
+		return fmt.Errorf("invalid gateway route value: %q", route)
+	}
+	client, err := d.clientForNode(nodeID)
+	if err != nil {
+		return err
+	}
+	_, err = client.DeliverMessage(ctx, &livechat.DeliverMessageRequest{
+		UserId:   userID,
+		DeviceId: deviceID,
+		Message: &livechat.WsMessageDelivery{
+			ServerMessageId:    payload.ServerMessageID,
+			ConversationId:     payload.ConversationID,
+			ConversationSeq:    uint64(payload.ConversationSeq),
+			SenderUserId:       uint64(payload.SenderUserID),
+			SenderDeviceId:     payload.SenderDeviceID,
+			MessageType:        payload.MessageType,
+			Content:            payload.Content,
+			ServerReceivedAtMs: payload.ServerReceivedAtMs,
+		},
+	})
+	return err
+}
+
+func redisUserKey(userID int64, deviceID string) string {
+	return fmt.Sprintf("gateway:user:%d:%s", userID, deviceID)
+}
+
+func splitRoute(route string) (string, string, bool) {
+	for i := 0; i < len(route); i++ {
+		if route[i] == ':' {
+			return route[:i], route[i+1:], route[:i] != ""
+		}
+	}
+	return "", "", false
+}
+
+func (d *grpcDeliverer) clientForNode(nodeID string) (livechat.GatewayDeliveryServiceClient, error) {
+	addr, err := gatewayGRPCAddr(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	conn, ok := d.conns[addr]
+	if !ok {
+		conn, err = grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, fmt.Errorf("dial gateway grpc %s: %w", addr, err)
+		}
+		d.conns[addr] = conn
+	}
+	return livechat.NewGatewayDeliveryServiceClient(conn), nil
+}
+
+func (d *grpcDeliverer) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var firstErr error
+	for addr, conn := range d.conns {
+		if err := conn.Close(); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("close grpc conn %s: %w", addr, err)
+		}
+		delete(d.conns, addr)
+	}
+	return firstErr
+}
+
+func gatewayGRPCAddr(nodeID string) (string, error) {
+	switch nodeID {
+	case "node-1":
+		return "localhost:9091", nil
+	default:
+		return "", fmt.Errorf("unknown gateway node id: %s", nodeID)
+	}
 }
 
 // summaryWriter maintains conversation_summaries.

@@ -365,10 +365,10 @@ func handleGetSyncEvents(svc *sync.Service) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"events":            events,
-			"has_more":          hasMore,
-			"latest_event_seq":  latestSeq,
-			"server_time_ms":    time.Now().UnixMilli(),
+			"events":           events,
+			"has_more":         hasMore,
+			"latest_event_seq": latestSeq,
+			"server_time_ms":   time.Now().UnixMilli(),
 		})
 	}
 }
@@ -489,6 +489,15 @@ func DeviceIDFromContext(ctx context.Context) string {
 	return v
 }
 
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, contextKey("trace_id"), traceID)
+}
+
+func TraceIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(contextKey("trace_id")).(string)
+	return v
+}
+
 func errorResponse(msg string) map[string]interface{} {
 	return map[string]interface{}{"error": msg}
 }
@@ -513,9 +522,9 @@ func handleRefreshToken(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 		}
 
 		// Hash the incoming token and look up device
-			h := sha256.Sum256([]byte(req.RefreshToken))
-			hash := hex.EncodeToString(h[:])
-			var userID int64
+		h := sha256.Sum256([]byte(req.RefreshToken))
+		hash := hex.EncodeToString(h[:])
+		var userID int64
 		var deviceID string
 		err := db.QueryRowContext(r.Context(),
 			"SELECT user_id, id FROM devices WHERE refresh_token_hash=$1", hash,
@@ -631,7 +640,7 @@ func handleCreateGroup(svc *group.Service) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusCreated, map[string]interface{}{
-			"group":   g,
+			"group":           g,
 			"conversation_id": svc.GetConversationID(g.ID),
 		})
 	}
@@ -707,18 +716,25 @@ func handleListGroupMembers(svc *group.Service) http.HandlerFunc {
 	}
 }
 
-
-
-
-
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
+		traceID := r.Header.Get("X-Trace-Id")
+		if traceID == "" {
+			traceID = generateTraceID(r)
+		}
+		w.Header().Set("X-Trace-Id", traceID)
+		next.ServeHTTP(w, r.WithContext(WithTraceID(r.Context(), traceID)))
 		slog.Info("request",
+			"trace_id", traceID,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
 	})
+}
+
+func generateTraceID(r *http.Request) string {
+	sum := sha256.Sum256([]byte(r.Method + "|" + r.URL.Path + "|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+	return hex.EncodeToString(sum[:8])
 }

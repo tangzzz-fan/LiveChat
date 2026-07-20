@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,9 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/gateway"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
+	syncsvc "github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
+	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -60,9 +64,17 @@ func main() {
 
 	gwMgr := gateway.NewManager(
 		authSvc, rdb, "node-1",
-		30*time.Second,  // heartbeat interval
-		90*time.Second,  // read timeout
+		30*time.Second, // heartbeat interval
+		90*time.Second, // read timeout
 	)
+	gwMgr.SetSyncSequenceProvider(syncsvc.NewService(db))
+	ackForwarder, err := gateway.NewGRPCAckForwarder("localhost:9090")
+	if err != nil {
+		slog.Error("failed to create ack forwarder", "error", err)
+		os.Exit(1)
+	}
+	defer ackForwarder.Close()
+	gwMgr.SetAckForwarder(ackForwarder)
 
 	// Start watchdog
 	go gwMgr.StartWatchdog(ctx)
@@ -80,11 +92,25 @@ func main() {
 		Addr:    ":8081",
 		Handler: mux,
 	}
+	grpcLis, err := net.Listen("tcp", ":9091")
+	if err != nil {
+		slog.Error("gateway gRPC listen failed", "error", err)
+		os.Exit(1)
+	}
+	grpcSrv := grpc.NewServer()
+	livechat.RegisterGatewayDeliveryServiceServer(grpcSrv, gateway.NewDeliveryService(gwMgr))
 
 	go func() {
 		slog.Info("gateway starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("gateway error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	go func() {
+		slog.Info("gateway gRPC starting", "addr", grpcLis.Addr().String())
+		if err := grpcSrv.Serve(grpcLis); err != nil {
+			slog.Error("gateway gRPC error", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -94,6 +120,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	srv.Shutdown(shutdownCtx)
+	grpcSrv.GracefulStop()
 	slog.Info("gateway stopped")
 }
 

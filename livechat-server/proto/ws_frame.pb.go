@@ -826,7 +826,7 @@ const file_ws_frame_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x120\n" +
 	"\x14last_message_preview\x18\x02 \x01(\tR\x12lastMessagePreview\x12+\n" +
 	"\x12last_message_at_ms\x18\x03 \x01(\x03R\x0flastMessageAtMs\x12!\n" +
-	"\funread_count\x18\x04 \x01(\x05R\vunreadCountB@Z>github.com/tangzzz-fan/LiveChat/livechat-server/internal/protob\x06proto3"
+	"\funread_count\x18\x04 \x01(\x05R\vunreadCountB=Z;github.com/tangzzz-fan/LiveChat/livechat-server/proto;protob\x06proto3"
 
 var (
 	file_ws_frame_proto_rawDescOnce sync.Once

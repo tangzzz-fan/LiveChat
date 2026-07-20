@@ -91,20 +91,50 @@ func (s *Service) List(ctx context.Context, userID int64, limit, offset int) ([]
 
 	var summaries []domain.ConversationSummary
 	for rows.Next() {
-		var s domain.ConversationSummary
+		var summary domain.ConversationSummary
 		var lastMsgAt sql.NullTime
-		if err := rows.Scan(&s.UserID, &s.ConversationID, &s.ConversationType,
-			&s.LastMessagePreview, &lastMsgAt,
-			&s.UnreadCount, &s.IsPinned, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&summary.UserID, &summary.ConversationID, &summary.ConversationType,
+			&summary.LastMessagePreview, &lastMsgAt,
+			&summary.UnreadCount, &summary.IsPinned, &summary.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan summary: %w", err)
 		}
 		if lastMsgAt.Valid {
-			s.LastMessageAt = lastMsgAt.Time
+			summary.LastMessageAt = lastMsgAt.Time
 		}
-		summaries = append(summaries, s)
+		members, err := s.listMembers(ctx, summary.ConversationID)
+		if err != nil {
+			return nil, fmt.Errorf("list members for %s: %w", summary.ConversationID, err)
+		}
+		summary.Members = members
+		summaries = append(summaries, summary)
 	}
 	if summaries == nil {
 		summaries = make([]domain.ConversationSummary, 0)
 	}
 	return summaries, rows.Err()
+}
+
+func (s *Service) listMembers(ctx context.Context, conversationID string) ([]domain.ConversationSummaryMember, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT cm.user_id, u.display_name
+		 FROM conversation_members cm
+		 JOIN users u ON u.id = cm.user_id
+		 WHERE cm.conversation_id = $1
+		 ORDER BY cm.user_id`,
+		conversationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := make([]domain.ConversationSummaryMember, 0)
+	for rows.Next() {
+		var member domain.ConversationSummaryMember
+		if err := rows.Scan(&member.UserID, &member.DisplayName); err != nil {
+			return nil, err
+		}
+		members = append(members, member)
+	}
+	return members, rows.Err()
 }

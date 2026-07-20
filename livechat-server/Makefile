@@ -1,4 +1,4 @@
-.PHONY: dev dev-down migrate-up migrate-down proto build test
+.PHONY: dev dev-down migrate-up migrate-down proto build test cleanup-sync-events
 
 # ── Docker ───────────────────────────────────────────
 dev:
@@ -24,6 +24,7 @@ build:
 	go build ./cmd/message-service
 	go build ./cmd/gateway
 	go build ./cmd/outbox-consumer
+	go build ./cmd/sync-retention
 
 # ── Test ─────────────────────────────────────────────
 test:
@@ -41,3 +42,6 @@ run-gateway:
 
 run-outbox-consumer:
 	go run ./cmd/outbox-consumer
+
+cleanup-sync-events:
+	go run ./cmd/sync-retention

@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+var (
+	sleepFn   = time.Sleep
+	randFloat = rand.Float64
+)
+
 // Config holds consumer configuration.
 type Config struct {
 	PollInterval     time.Duration // 100ms active
@@ -136,12 +141,24 @@ func (c *Consumer) Run(ctx context.Context) error {
 // fetchPending retrieves pending events up to BatchSize.
 func (c *Consumer) fetchPending(ctx context.Context) ([]Event, error) {
 	rows, err := c.db.QueryContext(ctx,
-		`SELECT id, aggregate_type, aggregate_id, event_type, payload, status, retry_count, created_at
-		 FROM outbox_events
-		 WHERE status IN ('pending', 'retry')
-		 ORDER BY created_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`,
+		`WITH claimed AS (
+			SELECT id
+			FROM outbox_events
+			WHERE status = 'pending'
+			ORDER BY created_at
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		),
+		updated AS (
+			UPDATE outbox_events o
+			SET status = 'processing', processed_at = NOW()
+			FROM claimed
+			WHERE o.id = claimed.id
+			RETURNING o.id, o.aggregate_type, o.aggregate_id, o.event_type, o.payload, o.status, o.retry_count, o.created_at
+		)
+		SELECT id, aggregate_type, aggregate_id, event_type, payload, status, retry_count, created_at
+		FROM updated
+		ORDER BY created_at`,
 		c.cfg.BatchSize,
 	)
 	if err != nil {
@@ -170,12 +187,6 @@ func (c *Consumer) processEvent(ctx context.Context, workerID int, event Event) 
 		slog.Warn("no handler for event type", "event_type", event.EventType, "event_id", event.ID)
 		// Mark as done anyway to avoid blocking the queue
 		c.markDone(ctx, event.ID)
-		return
-	}
-
-	// Mark processing
-	if err := c.markProcessing(ctx, event.ID); err != nil {
-		slog.Error("mark processing", "event_id", event.ID, "error", err)
 		return
 	}
 
@@ -211,7 +222,7 @@ func (c *Consumer) processEvent(ctx context.Context, workerID int, event Event) 
 			"retry_count", newRetryCount,
 			"backoff", backoff,
 		)
-		time.Sleep(backoff)
+		sleepFn(backoff)
 		c.markRetry(ctx, event.ID, err.Error())
 	} else {
 		c.markDone(ctx, event.ID)
@@ -225,18 +236,13 @@ func (c *Consumer) processEvent(ctx context.Context, workerID int, event Event) 
 
 // backoffDuration returns min(1s * 2^retry, 30s) with ±25% jitter.
 func backoffDuration(retryCount int) time.Duration {
-	base := time.Duration(math.Min(float64(time.Second)*math.Pow(2, float64(retryCount-1)), 30000)) * time.Millisecond
-	jitter := time.Duration(float64(base) * 0.25 * (rand.Float64()*2 - 1))
+	baseSeconds := math.Min(math.Pow(2, float64(retryCount-1)), 30)
+	base := time.Duration(baseSeconds * float64(time.Second))
+	jitter := time.Duration(float64(base) * 0.25 * (randFloat()*2 - 1))
 	return base + jitter
 }
 
 // ── Status updates ───────────────────────────────────
-
-func (c *Consumer) markProcessing(ctx context.Context, id int64) error {
-	_, err := c.db.ExecContext(ctx,
-		`UPDATE outbox_events SET status='processing', processed_at=NOW() WHERE id=$1`, id)
-	return err
-}
 
 func (c *Consumer) markDone(ctx context.Context, id int64) error {
 	_, err := c.db.ExecContext(ctx,
@@ -246,7 +252,7 @@ func (c *Consumer) markDone(ctx context.Context, id int64) error {
 
 func (c *Consumer) markRetry(ctx context.Context, id int64, lastErr string) error {
 	_, err := c.db.ExecContext(ctx,
-		`UPDATE outbox_events SET status='retry', retry_count=retry_count+1, last_error=$2 WHERE id=$1`, id, lastErr)
+		`UPDATE outbox_events SET status='pending', retry_count=retry_count+1, last_error=$2, processed_at=NULL WHERE id=$1`, id, lastErr)
 	return err
 }
 
@@ -259,7 +265,7 @@ func (c *Consumer) markFailed(ctx context.Context, id int64, lastErr string) err
 func (c *Consumer) reapStale(ctx context.Context) error {
 	res, err := c.db.ExecContext(ctx,
 		`UPDATE outbox_events
-		 SET status='retry', processed_at=NULL
+		 SET status='pending', processed_at=NULL
 		 WHERE status='processing'
 		   AND processed_at < NOW() - INTERVAL '1 second' * $1`, int(c.cfg.LeaseTimeout.Seconds()))
 	if err != nil {
@@ -293,7 +299,7 @@ func (c *Consumer) Metrics(ctx context.Context) map[string]int64 {
 	// Consumer lag: oldest pending event age in seconds
 	var lag sql.NullFloat64
 	c.db.QueryRowContext(ctx,
-		"SELECT EXTRACT(EPOCH FROM NOW() - MIN(created_at)) FROM outbox_events WHERE status IN ('pending', 'retry')",
+		"SELECT EXTRACT(EPOCH FROM NOW() - MIN(created_at)) FROM outbox_events WHERE status = 'pending'",
 	).Scan(&lag)
 	if lag.Valid {
 		metrics["outbox_consumer_lag_seconds"] = int64(lag.Float64)

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package livechat.ws;
 
-option go_package = "github.com/tangzzz-fan/LiveChat/livechat-server/internal/proto";
+option go_package = "github.com/tangzzz-fan/LiveChat/livechat-server/proto;proto";
 
 // WsFrame is the outer envelope for all WebSocket messages.
 message WsFrame {

@@ -85,6 +85,8 @@ func (s *Service) Send(ctx context.Context, req SendRequest) (*SendResult, error
 		"sender_user_id":    req.SenderUserID,
 		"sender_device_id":  req.SenderDeviceID,
 		"message_type":      req.MessageType,
+		"content":           req.Content,
+		"server_received_at_ms": now.UnixMilli(),
 		"created_at":        now.Format(time.RFC3339Nano),
 	}
 	payloadJSON, err := json.Marshal(payload)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,7 +12,12 @@ import (
 
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/api"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/receipts"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
+	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -63,16 +69,32 @@ func main() {
 
 	// Router
 	mux := api.NewRouter(db, rdb, authSvc)
+	syncSvc := sync.NewService(db)
+	receiptSvc := receipts.NewService(db, syncSvc, conversations.NewService(db))
 
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
 	}
+	grpcLis, err := net.Listen("tcp", ":9090")
+	if err != nil {
+		slog.Error("message-service gRPC listen failed", "error", err)
+		os.Exit(1)
+	}
+	grpcSrv := grpc.NewServer()
+	livechat.RegisterMessageAckServiceServer(grpcSrv, receipts.NewGRPCServer(receiptSvc))
 
 	go func() {
 		slog.Info("message-service starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	go func() {
+		slog.Info("message-service gRPC starting", "addr", grpcLis.Addr().String())
+		if err := grpcSrv.Serve(grpcLis); err != nil {
+			slog.Error("message-service gRPC error", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -85,5 +107,6 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown error", "error", err)
 	}
+	grpcSrv.GracefulStop()
 	slog.Info("stopped")
 }

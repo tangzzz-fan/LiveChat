@@ -105,7 +105,14 @@ Send → Outbox → Consumer → Fanout → 查 Redis 路由
                                     └─ 离线: sync_events 写入
 ```
 
-P0 阶段 gRPC 投递暂为日志输出（`logDeliverer`）。完整 gRPC 投递需要在 Gateway 侧暴露 gRPC server，并在 Fanout 中通过 gRPC client 调用。这是后续可以立即补齐的点。
+当前实现已经按 Spec 05 收敛为强契约内部接口：
+
+- Gateway 暴露 `GatewayDeliveryService.DeliverMessage` gRPC 服务。
+- Outbox Consumer / Fanout 侧通过 `GatewayDeliveryServiceClient` 将 `WsMessageDelivery` protobuf 投递到目标 Gateway 节点。
+- 若目标 `device_id` 在本节点不存在，Gateway 返回 gRPC `NotFound`，并清理过期路由，后续由 `sync_events` 补拉兜底。
+- `sync_events` 仍是事实来源，实时投递只是在线设备的加速路径。
+
+这替代了早期的节点内临时通道实现，后续开发不再以临时传输层作为基线。
 
 ### 离线补拉
 
@@ -133,6 +140,20 @@ P0 阶段 gRPC 投递暂为日志输出（`logDeliverer`）。完整 gRPC 投递
 - 服务端：`conversation_summaries.unread_count` 在 `MarkRead()` 时重置为 0。
 - 客户端：收到 `sync_event`（`event_type='message_read'` 或 `conversation_updated`）后，本地 `last_read_seq = max(local, event.last_read_seq)`。
 - `sync_cursors` 的 `last_event_seq` 也使用 `GREATEST` 更新，防止旧游标回退。
+
+### ACK 上送链路
+
+`ACK(read)` 不在 Gateway 本地落业务库，而是走独立的内部服务链路：
+
+```
+Client → Gateway(WebSocket ACK)
+       → gRPC MessageAckService.ProcessAck
+       → outbox_events(read_receipt)
+       → Outbox Consumer
+       → conversation_updated / message_read sync_events
+```
+
+原因是 Gateway 只负责连接与协议，已读推进属于业务语义和多端一致性范畴，必须进入 Message Service 的单一可信源。
 
 ---
 

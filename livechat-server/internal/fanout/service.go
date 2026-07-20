@@ -57,6 +57,8 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 		SenderUserID     int64  `json:"sender_user_id"`
 		SenderDeviceID   string `json:"sender_device_id"`
 		MessageType      string `json:"message_type"`
+		Content          string `json:"content"`
+		ServerReceivedAtMs int64 `json:"server_received_at_ms"`
 		CreatedAt        string `json:"created_at"`
 	}
 	if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
@@ -76,8 +78,8 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 		SenderUserID:       p.SenderUserID,
 		SenderDeviceID:     p.SenderDeviceID,
 		MessageType:        p.MessageType,
-		Content:            "", // content fetched separately
-		ServerReceivedAtMs: 0,
+		Content:            p.Content,
+		ServerReceivedAtMs: p.ServerReceivedAtMs,
 	}
 
 	for _, memberID := range members {
@@ -85,16 +87,17 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 			continue // don't deliver to sender
 		}
 
+		// Pull is the source of truth. Every recipient gets a sync event,
+		// and realtime delivery is an acceleration path for online devices.
+		s.appendSyncEvent(ctx, memberID, p)
+
 		// Find online devices
 		devices, err := s.getOnlineDevices(ctx, memberID)
 		if err != nil {
 			slog.Error("get online devices", "user_id", memberID, "error", err)
-			// Fall through to sync backfill
-			s.appendSyncEvent(ctx, memberID, p)
 			continue
 		}
 
-		hasOnline := false
 		for _, did := range devices {
 			err := s.deliverer.DeliverMessage(ctx, memberID, did, delivery)
 			if err != nil {
@@ -102,12 +105,6 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 					"user_id", memberID, "device_id", did, "error", err)
 				continue
 			}
-			hasOnline = true
-		}
-
-		// If no device is online, write sync event
-		if !hasOnline || len(devices) == 0 {
-			s.appendSyncEvent(ctx, memberID, p)
 		}
 	}
 
@@ -158,6 +155,8 @@ func (s *Service) appendSyncEvent(ctx context.Context, userID int64, p struct {
 	SenderUserID    int64  `json:"sender_user_id"`
 	SenderDeviceID  string `json:"sender_device_id"`
 	MessageType     string `json:"message_type"`
+	Content         string `json:"content"`
+	ServerReceivedAtMs int64 `json:"server_received_at_ms"`
 	CreatedAt       string `json:"created_at"`
 }) {
 	payload := map[string]interface{}{
@@ -167,6 +166,8 @@ func (s *Service) appendSyncEvent(ctx context.Context, userID int64, p struct {
 		"sender_user_id":    p.SenderUserID,
 		"sender_device_id":  p.SenderDeviceID,
 		"message_type":      p.MessageType,
+		"content":           p.Content,
+		"server_received_at_ms": p.ServerReceivedAtMs,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	if err := s.sync.AppendEvent(ctx, userID, domain.EventTypeMessageCreated, payloadJSON); err != nil {

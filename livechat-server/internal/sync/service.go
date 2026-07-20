@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 )
@@ -111,6 +112,35 @@ func (s *Service) GetCursor(ctx context.Context, userID int64, deviceID string) 
 		return 0, nil
 	}
 	return cursor, err
+}
+
+// LatestEventSeq returns the latest event_seq for a given user.
+func (s *Service) LatestEventSeq(ctx context.Context, userID int64) (int64, error) {
+	var latestSeq int64
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(event_seq), 0) FROM sync_events WHERE user_id=$1",
+		userID,
+	).Scan(&latestSeq)
+	if err != nil {
+		return 0, fmt.Errorf("query latest event seq: %w", err)
+	}
+	return latestSeq, nil
+}
+
+// DeleteEventsOlderThan removes sync events older than the provided cutoff.
+func (s *Service) DeleteEventsOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM sync_events WHERE created_at < $1`,
+		cutoff,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete sync events older than cutoff: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected for sync cleanup: %w", err)
+	}
+	return rows, nil
 }
 
 // GetMessages returns messages for a conversation with cursor-based pagination.
