@@ -6,7 +6,7 @@
 
 LiveChat 是一个以学习为导向的 WhatsApp 类即时通信系统设计项目。当前阶段以规格文档为主，先完成领域建模、链路拆解和工程边界约束，再逐步落地服务端、客户端、协议与基础设施实现。
 
-**Phase 1 (消息正确性骨架) 已实现，代码位于 `livechat-server/`。**
+**Phase 1 (消息正确性骨架) 已部分实现，代码位于 `livechat-server/`，当前状态为 `in_progress` 而不是完成态。**
 
 当前仓库的设计源位于 `Specs/`，不是旧的 `specs/SPEC-xxx` 目录结构。
 
@@ -39,7 +39,8 @@ LiveChat/
 - 任何设计变更先改 spec，再改配置、脚本和代码。
 - 文档编号和主题必须与 `Specs/` 保持一致。
 - 旧的 `specs/SPEC-xxx` 路径视为历史路径，不应继续引用。
-- Phase 1 已完成（tag: `v0.1.0-p0`），Phase 2 尚未开始。
+- Phase 1 当前为 `in_progress`，已通过 HTTP 主链路 smoke 和一条 `MESSAGE_DELIVERY` 自动化测试，但整体验收未完成。
+- Phase 2 票据已拆分，但整体尚未开始执行。
 
 ## 规格推进顺序
 
@@ -88,9 +89,15 @@ Issues 使用本地 `issues/` 目录（不依赖 GitHub Issues）。见 `docs/ag
 - 使用 `brew` 管理本地服务
 - 通过 `proxy_on` 开启终端代理访问外网
 - `livechat-server/Makefile` 提供常用命令
-- **一键搭建**: `./scripts/setup.sh`（首次使用）
-- **一键启动**: `./scripts/setup.sh --start`（启动所有服务）
-- **停止服务**: `./scripts/stop.sh`
+- 当前已验证的默认开发路径是**本机服务模式**：本地 PostgreSQL + 本地 Redis
+- 本地 Redis 视为当前仓库的默认运行时依赖，默认地址为 `localhost:6379`
+- 本地 PostgreSQL 视为当前仓库的默认运行时依赖，默认地址为 `localhost:5432`
+- 若 `make dev` 因缺少 `docker` 失败，不视为仓库故障，应直接切换到本机服务模式
+- 当前仓库**不存在**可作为默认入口的 `./scripts/setup.sh` 或 `./scripts/stop.sh`，不要再引用它们作为标准启动方式
+- 推荐启动顺序：
+  1. 确认本地 PostgreSQL 与 Redis 已启动
+  2. 执行 `make migrate-up`
+  3. 分别执行 `make run-message-service`、`make run-gateway`、`make run-outbox-consumer`
 
 ### Issue 实现约定
 

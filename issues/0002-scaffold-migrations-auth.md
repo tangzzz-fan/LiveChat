@@ -1,8 +1,8 @@
 ---
 id: "0002"
 title: "项目脚手架 + DB 迁移 + Mock Auth"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: in_progress
+labels: ["in-progress"]
 parent: "0001"
 blocked_by: []
 created_at: 2026-07-20
@@ -39,6 +39,12 @@ created_at: 2026-07-20
 - [ ] `POST /v1/auth/login` 使用已注册手机号 + 任意 6 位验证码返回 200 + 有效 JWT
 - [ ] 使用 login 返回的 JWT 访问任意受保护端点，鉴权中间件校验通过
 - [ ] `GET /health` 返回 200 + PostgreSQL 和 Redis 连通状态
+
+## Current implementation status
+
+- 已实现：`livechat-server` 模块结构、三个服务入口、迁移工具、`POST /v1/auth/register`、`POST /v1/auth/login`、JWT 与 refresh token 基础逻辑、`GET /health`。
+- 已验证：`go build ./cmd/message-service`、`go build ./cmd/gateway`、`go build ./cmd/outbox-consumer` 可通过；注册后可获得 JWT 并访问受保护端点；健康检查可返回 PostgreSQL/Redis 状态。
+- 未完成：本票的验收标准仍未全部关闭，尤其是 `make dev` 依赖 Docker，而当前验证环境没有 `docker` 命令；重复注册返回 `409` 这一条也尚未作为本地验证结论记录。
 
 ## Blocked by
 

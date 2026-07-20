@@ -45,60 +45,19 @@ livechat-server/
 └── go.mod                  # Go module 定义
 ```
 
-## 快速开始
+## 构建与测试
 
-### 1. 创建数据库
+`livechat-server` 的构建、启动、测试、Phase 1 验证状态已单独迁移到：
 
-```bash
-createuser livechat -s
-psql postgres -c "ALTER USER livechat WITH PASSWORD 'livechat';"
-createdb livechat -O livechat
-```
+- [docs/build-and-test.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/build-and-test.md)
 
-### 2. 运行数据库迁移
+该文档包含：
 
-```bash
-go run ./cmd/migrate up
-```
-
-这会创建 8 张表：`users` → `devices` → `conversations` + `conversation_members` → `messages` → `outbox_events` → `sync_events` → `sync_cursors` → `conversation_summaries`
-
-### 3. 启动服务（三个独立进程）
-
-```bash
-# 终端 1：HTTP API 服务（端口 8080）
-go run ./cmd/message-service
-
-# 终端 2：WebSocket 网关（端口 8081）
-go run ./cmd/gateway
-
-# 终端 3：Outbox 消费者（无端口，轮询 DB）
-go run ./cmd/outbox-consumer
-```
-
-### 4. 验证服务是否正常
-
-```bash
-# 健康检查
-curl http://localhost:8080/health
-
-# Prometheus 指标
-curl http://localhost:8080/debug/vars
-```
-
-## Makefile 常用命令
-
-```bash
-make dev              # 启动 PG + Redis（Docker 方式）
-make migrate-up       # 执行数据库迁移
-make migrate-down     # 回滚数据库迁移
-make proto            # 从 .proto 生成 Go 代码
-make build            # 编译所有二进制
-make test             # 运行测试
-make run-message-service  # 启动 Message Service
-make run-gateway          # 启动 Gateway
-make run-outbox-consumer  # 启动 Outbox Consumer
-```
+- 本机服务模式与 Docker 模式
+- `make build` / `make test` 的真实含义
+- 运行时健康检查
+- `./scripts/phase1-smoke.sh` 验证回路
+- Phase 1 当前交付结论
 
 ## API 文档
 
@@ -297,206 +256,23 @@ curl http://localhost:8080/health
 # → {"status":"ok","details":{"postgres":"ok","redis":"ok"}}
 
 # Metrics（Prometheus 格式）
-curl http://localhost:8080/debug/vars
+curl http://localhost:8080/metrics
 
 # Gateway 健康 + 活跃连接数
 curl http://localhost:8081/health
 # → {"status":"ok","active_sessions":3}
 ```
 
-## 完整端到端验证流程
+## 阶段验证
+
+Phase 1 / Phase 2 的构建、测试、smoke、当前结论也已迁移到：
+
+- [docs/build-and-test.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/build-and-test.md)
+
+建议直接使用：
 
 ```bash
-# 1. 注册两个用户
-RESP_A=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000001","verification_code":"123456","device_id":"a-ios","platform":"ios"}')
-TOKEN_A=$(echo "$RESP_A" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-
-RESP_B=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000002","verification_code":"123456","device_id":"b-android","platform":"android"}')
-TOKEN_B=$(echo "$RESP_B" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-
-# 2. 创建会话并添加成员
-psql -U livechat livechat -c "INSERT INTO conversations (id, type) VALUES ('conv-1', 'direct');"
-psql -U livechat livechat -c "INSERT INTO conversation_members (conversation_id, user_id) VALUES ('conv-1', 1), ('conv-1', 2);"
-
-# 3. A 发送消息
-curl -s -X POST http://localhost:8080/v1/messages/send \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d '{"client_message_id":"m1","conversation_id":"conv-1","message_type":"text","content":"{\"text\":\"Hello from A\"}"}'
-
-# 4. B 查看会话列表
-curl -s "http://localhost:8080/v1/conversations" -H "Authorization: Bearer $TOKEN_B"
-# → 应显示 unread_count: 1
-
-# 5. B 查看同步事件
-curl -s "http://localhost:8080/v1/sync/events?cursor=0" -H "Authorization: Bearer $TOKEN_B"
-# → 应返回 message_created 事件
-
-# 6. B 读取具体消息
-curl -s "http://localhost:8080/v1/conversations/conv-1/messages?from_seq=1" -H "Authorization: Bearer $TOKEN_B"
-# → 应返回 A 发送的消息
-```
-
-## Phase 2 功能验证命令
-
-以下命令用于验证 Phase 2 新增功能的端到端行为。执行前需确保：
-
-```bash
-# 一键启动所有服务
-./scripts/setup.sh --start
-```
-
-### 快速环境初始化（所有测试共用）
-
-```bash
-RESP_A=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000001","verification_code":"123456","device_id":"ios-A","platform":"ios"}')
-TOKEN_A=$(echo "$RESP_A" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-UID_A=$(echo "$RESP_A" | python3 -c 'import sys,json; print(json.load(sys.stdin)["user_id"])')
-
-RESP_B=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000002","verification_code":"123456","device_id":"android-B","platform":"android"}')
-TOKEN_B=$(echo "$RESP_B" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-UID_B=$(echo "$RESP_B" | python3 -c 'import sys,json; print(json.load(sys.stdin)["user_id"])')
-
-psql -U livechat livechat -c "INSERT INTO conversations (id, type) VALUES ('conv-1', 'direct') ON CONFLICT DO NOTHING;"
-psql -U livechat livechat -c "INSERT INTO conversation_members (conversation_id, user_id) VALUES ('conv-1', $UID_A), ('conv-1', $UID_B) ON CONFLICT DO NOTHING;"
-
-echo "UID_A=$UID_A  UID_B=$UID_B"
-```
-
-### 0010: Refresh Token 轮换
-
-```bash
-REFRESH=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000003","verification_code":"123456","device_id":"dev-refresh","platform":"ios"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["refresh_token"])')
-
-echo "refresh_token: $REFRESH"
-
-curl -s -X POST http://localhost:8080/v1/auth/refresh \
-  -H 'Content-Type: application/json' \
-  -d "{\"refresh_token\": \"$REFRESH\"}" | python3 -m json.tool
-# 应返回新的 access_token + refresh_token（轮换后旧 token 失效）
-```
-
-### 0011: 设备列表与吊销
-
-```bash
-# 查看设备列表
-curl -s "http://localhost:8080/v1/devices" \
-  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
-# 应返回 devices 数组，is_current=true
-
-# 吊销设备
-curl -s -X POST "http://localhost:8080/v1/devices/ios-A/revoke" \
-  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
-# 应返回 {"revoked":"ios-A"}
-```
-
-### 0012/0013: 群聊创建与成员管理
-
-```bash
-# 创建群
-GRESP=$(curl -s -X POST http://localhost:8080/v1/groups \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"测试群聊","description":"Phase 2 验证"}')
-echo "$GRESP" | python3 -m json.tool
-
-GID=$(echo "$GRESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["group"]["id"])')
-CID=$(echo "$GRESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["conversation_id"])')
-echo "Group: $GID, Conv: $CID"
-
-# 加人
-curl -s -X POST "http://localhost:8080/v1/groups/$GID/members" \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d "{\"user_ids\": [$UID_B]}" | python3 -m json.tool
-# 应返回 {"added":1}
-
-# 查看成员
-curl -s "http://localhost:8080/v1/groups/$GID/members" \
-  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
-# 应含 owner (UID_A) 和 member (UID_B)
-
-# 踢人
-curl -s -X DELETE "http://localhost:8080/v1/groups/$GID/members/$UID_B" \
-  -H "Authorization: Bearer $TOKEN_A" | python3 -m json.tool
-# 应返回 {"removed":<UID_B>}
-```
-
-### 0006/0016: 群聊消息 + 同步验证
-
-```bash
-# 重新加 B 入群（如果上面已踢出）
-curl -s -X POST "http://localhost:8080/v1/groups/$GID/members" \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d "{\"user_ids\": [$UID_B]}" > /dev/null
-
-# A 在群聊中发消息
-curl -s -X POST http://localhost:8080/v1/messages/send \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d "{\"client_message_id\":\"group-msg-1\",\"conversation_id\":\"$CID\",\"message_type\":\"text\",\"content\":\"{\\\"text\\\":\\\"大家好\\\"}\"}" \
-  | python3 -m json.tool
-# 应返回 server_message_id + conversation_seq
-
-# B 拉取群聊消息
-curl -s "http://localhost:8080/v1/conversations/$CID/messages?from_seq=1" \
-  -H "Authorization: Bearer $TOKEN_B" | python3 -m json.tool
-# 应看到 A 的消息
-
-# B 查看同步事件
-curl -s "http://localhost:8080/v1/sync/events?cursor=0" \
-  -H "Authorization: Bearer $TOKEN_B" | python3 -m json.tool
-# 应含 message_created 事件
-```
-
-### 权限拒绝验证
-
-```bash
-# 第三人非群成员
-TOKEN_C=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"phone_e164":"+8613800000005","verification_code":"123456","device_id":"ios-C","platform":"ios"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-
-# 非成员发消息 → 403
-curl -s -X POST http://localhost:8080/v1/messages/send \
-  -H "Authorization: Bearer $TOKEN_C" \
-  -H 'Content-Type: application/json' \
-  -d "{\"client_message_id\":\"bad\",\"conversation_id\":\"$CID\",\"message_type\":\"text\",\"content\":\"{}\"}" \
-  | python3 -m json.tool
-# 应返回 403
-
-# 非成员读消息 → 403
-curl -s "http://localhost:8080/v1/conversations/$CID/messages?from_seq=1" \
-  -H "Authorization: Bearer $TOKEN_C" | python3 -m json.tool
-# 应返回 403
-```
-
-### 幂等性验证
-
-```bash
-for i in 1 2; do
-  echo "=== 第 $i 次 ==="
-  curl -s -X POST http://localhost:8080/v1/messages/send \
-    -H "Authorization: Bearer $TOKEN_A" \
-    -H 'Content-Type: application/json' \
-    -d "{\"client_message_id\":\"idem-test\",\"conversation_id\":\"conv-1\",\"message_type\":\"text\",\"content\":\"{\\\"text\\\":\\\"幂等\\\"}\"}" \
-    | python3 -m json.tool
-done
-# 第 1 次: is_duplicate=false
-# 第 2 次: is_duplicate=true
+./scripts/phase1-smoke.sh
 ```
 
 ## 数据库表速查

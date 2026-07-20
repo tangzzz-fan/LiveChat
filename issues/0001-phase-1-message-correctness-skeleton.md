@@ -1,8 +1,8 @@
 ---
 id: "0001"
 title: "阶段一：消息正确性骨架 — Message Service + Gateway 落地实现"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: in_progress
+labels: ["in-progress"]
 created_at: 2026-07-20
 ---
 
@@ -19,6 +19,15 @@ created_at: 2026-07-20
 - 多端已读状态是否真的收敛到 `MAX(last_read_seq)`？
 
 没有可运行的消息正确性骨架，后续群聊、媒体、推送等 P0 扩展就没有可信的基线，每次改动都得靠人眼对照 spec，不可持续。
+
+## Current implementation status
+
+- 已验证：`make build` 可通过，`make test` 可执行，`./scripts/phase1-smoke.sh` 可验证 direct conversation 下的注册、消息发送、幂等重发、会话摘要、同步事件和消息补拉。
+- 已新增验证：Gateway 已有 `MESSAGE_DELIVERY` 自动化测试，证明连接成功的 Device 可以接收实时投递帧。
+- 已新增验证：`ACK(read)` 已有转发与业务投影测试，证明 Gateway 能把 ACK 转发到 Message Service，且 `read_receipt` 会把已读状态投影为 `message_read` / `conversation_updated` sync events。
+- 已实现：`Message Service`、`Gateway`、`Outbox Consumer`、`Sync Service` 的基础代码骨架已经存在，并可在本机 PostgreSQL/Redis 环境下运行。
+- 未完成：父票要求的“消息发送 -> 投递 -> 已读”整条闭环仍未打通，因此本票不能关闭。
+- 当前阻塞点集中在 `0006` 和 `0009`：`0006` 已完成节点内实时投递，但还缺进程级完整验收；`0009` 已有最小 ACK/read 闭环，但多端已读收敛和进程级完整验收仍未完成。
 
 ## Solution
 

@@ -1,8 +1,8 @@
 ---
 id: "0003"
 title: "消息发送 API + 幂等写入 + Outbox 事件"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: in_progress
+labels: ["in-progress"]
 parent: "0001"
 blocked_by: ["0002"]
 created_at: 2026-07-20
@@ -37,6 +37,12 @@ created_at: 2026-07-20
 - [ ] 发送者不是 conversation member → 返回 403
 - [ ] 缺少必填字段（`client_message_id`、`conversation_id`） → 返回 400
 - [ ] 无 JWT 访问 → 返回 401
+
+## Current implementation status
+
+- 已实现：`POST /v1/messages/send`、membership 校验、`conversation_seq` 分配、同事务写入 `messages` + `outbox_events`、幂等重发返回原始 `server_message_id` / `conversation_seq`。
+- 已验证：`./scripts/phase1-smoke.sh` 已确认 direct conversation 下消息发送成功、相同 `client_message_id` 重发命中幂等、消息可以后续被摘要和同步链路消费。
+- 未完成：本票虽然核心 HTTP 写路径已可用，但并未以自动化测试锁定；部分边界场景如“不同 user 共用同一 client_message_id”“所有 4xx 分支”尚未形成固定回归记录。
 
 ## Blocked by
 
