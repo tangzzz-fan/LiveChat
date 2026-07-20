@@ -4,6 +4,9 @@ server/msgsvc/msgsvc
 server/api/api
 server/pushworker/pushworker
 server/aisvc/aisvc
+livechat-server/gateway
+livechat-server/message-service
+livechat-server/outbox-consumer
 *.exe
 *.test
 *.out
