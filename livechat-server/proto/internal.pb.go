@@ -26,6 +26,7 @@ type DeliverMessageRequest struct {
 	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	DeviceId      string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	Message       *WsMessageDelivery     `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	TraceId       string                 `protobuf:"bytes,4,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +82,13 @@ func (x *DeliverMessageRequest) GetMessage() *WsMessageDelivery {
 	return nil
 }
 
+func (x *DeliverMessageRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
 type DeliverMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -126,6 +134,7 @@ type ProcessAckRequest struct {
 	ConversationId string                 `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	LastReadSeq    uint64                 `protobuf:"varint,6,opt,name=last_read_seq,json=lastReadSeq,proto3" json:"last_read_seq,omitempty"`
 	AckedAtMs      uint64                 `protobuf:"varint,7,opt,name=acked_at_ms,json=ackedAtMs,proto3" json:"acked_at_ms,omitempty"`
+	TraceId        string                 `protobuf:"bytes,8,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -209,6 +218,13 @@ func (x *ProcessAckRequest) GetAckedAtMs() uint64 {
 	return 0
 }
 
+func (x *ProcessAckRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
 type ProcessAckResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
@@ -257,12 +273,13 @@ var File_internal_proto protoreflect.FileDescriptor
 
 const file_internal_proto_rawDesc = "" +
 	"\n" +
-	"\x0einternal.proto\x12\x11livechat.internal\x1a\x0ews_frame.proto\"\x87\x01\n" +
+	"\x0einternal.proto\x12\x11livechat.internal\x1a\x0ews_frame.proto\"\xa2\x01\n" +
 	"\x15DeliverMessageRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\x128\n" +
-	"\amessage\x18\x03 \x01(\v2\x1e.livechat.ws.WsMessageDeliveryR\amessage\"\x18\n" +
-	"\x16DeliverMessageResponse\"\xee\x01\n" +
+	"\amessage\x18\x03 \x01(\v2\x1e.livechat.ws.WsMessageDeliveryR\amessage\x12\x19\n" +
+	"\btrace_id\x18\x04 \x01(\tR\atraceId\"\x18\n" +
+	"\x16DeliverMessageResponse\"\x89\x02\n" +
 	"\x11ProcessAckRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\x12\x19\n" +
@@ -270,7 +287,8 @@ const file_internal_proto_rawDesc = "" +
 	"\tevent_seq\x18\x04 \x01(\x04R\beventSeq\x12'\n" +
 	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationId\x12\"\n" +
 	"\rlast_read_seq\x18\x06 \x01(\x04R\vlastReadSeq\x12\x1e\n" +
-	"\vacked_at_ms\x18\a \x01(\x04R\tackedAtMs\"0\n" +
+	"\vacked_at_ms\x18\a \x01(\x04R\tackedAtMs\x12\x19\n" +
+	"\btrace_id\x18\b \x01(\tR\atraceId\"0\n" +
 	"\x12ProcessAckResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted2\x7f\n" +
 	"\x16GatewayDeliveryService\x12e\n" +

@@ -10,7 +10,7 @@ import (
 )
 
 type AckForwarder interface {
-	ForwardAck(ctx context.Context, userID int64, deviceID string, ack *livechat.MessageAck) error
+	ForwardAck(ctx context.Context, userID int64, deviceID string, ack *livechat.MessageAck, traceID string) error
 }
 
 type GRPCAckForwarder struct {
@@ -40,7 +40,7 @@ func (f *GRPCAckForwarder) Close() error {
 	return f.conn.Close()
 }
 
-func (f *GRPCAckForwarder) ForwardAck(ctx context.Context, userID int64, deviceID string, ack *livechat.MessageAck) error {
+func (f *GRPCAckForwarder) ForwardAck(ctx context.Context, userID int64, deviceID string, ack *livechat.MessageAck, traceID string) error {
 	if f.client == nil {
 		return fmt.Errorf("message ack gRPC client is not configured")
 	}
@@ -52,6 +52,7 @@ func (f *GRPCAckForwarder) ForwardAck(ctx context.Context, userID int64, deviceI
 		ConversationId: ack.GetConversationId(),
 		LastReadSeq:    ack.GetLastReadSeq(),
 		AckedAtMs:      ack.GetAckedAtMs(),
+		TraceId:        traceID,
 	})
 	if err != nil {
 		return fmt.Errorf("process ack over grpc: %w", err)

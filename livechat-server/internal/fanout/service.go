@@ -28,6 +28,7 @@ type DeliveryPayload struct {
 	MessageType        string `json:"message_type"`
 	Content            string `json:"content"`
 	ServerReceivedAtMs int64  `json:"server_received_at_ms"`
+	TraceID            string `json:"trace_id"`
 }
 
 // SyncWriter is the interface for appending sync events for offline devices.
@@ -51,15 +52,16 @@ func NewService(db *sql.DB, rdb *redis.Client, deliverer Deliverer, sync SyncWri
 // and writes sync events for offline devices.
 func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 	var p struct {
-		ServerMessageID  string `json:"server_message_id"`
-		ConversationID   string `json:"conversation_id"`
-		ConversationSeq  int64  `json:"conversation_seq"`
-		SenderUserID     int64  `json:"sender_user_id"`
-		SenderDeviceID   string `json:"sender_device_id"`
-		MessageType      string `json:"message_type"`
-		Content          string `json:"content"`
-		ServerReceivedAtMs int64 `json:"server_received_at_ms"`
-		CreatedAt        string `json:"created_at"`
+		ServerMessageID    string `json:"server_message_id"`
+		ConversationID     string `json:"conversation_id"`
+		ConversationSeq    int64  `json:"conversation_seq"`
+		SenderUserID       int64  `json:"sender_user_id"`
+		SenderDeviceID     string `json:"sender_device_id"`
+		MessageType        string `json:"message_type"`
+		Content            string `json:"content"`
+		ServerReceivedAtMs int64  `json:"server_received_at_ms"`
+		CreatedAt          string `json:"created_at"`
+		TraceID            string `json:"trace_id"`
 	}
 	if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
 		return err
@@ -80,6 +82,7 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 		MessageType:        p.MessageType,
 		Content:            p.Content,
 		ServerReceivedAtMs: p.ServerReceivedAtMs,
+		TraceID:            p.TraceID,
 	}
 
 	for _, memberID := range members {
@@ -149,25 +152,27 @@ func (s *Service) getOnlineDevices(ctx context.Context, userID int64) ([]string,
 }
 
 func (s *Service) appendSyncEvent(ctx context.Context, userID int64, p struct {
-	ServerMessageID string `json:"server_message_id"`
-	ConversationID  string `json:"conversation_id"`
-	ConversationSeq int64  `json:"conversation_seq"`
-	SenderUserID    int64  `json:"sender_user_id"`
-	SenderDeviceID  string `json:"sender_device_id"`
-	MessageType     string `json:"message_type"`
-	Content         string `json:"content"`
-	ServerReceivedAtMs int64 `json:"server_received_at_ms"`
-	CreatedAt       string `json:"created_at"`
+	ServerMessageID    string `json:"server_message_id"`
+	ConversationID     string `json:"conversation_id"`
+	ConversationSeq    int64  `json:"conversation_seq"`
+	SenderUserID       int64  `json:"sender_user_id"`
+	SenderDeviceID     string `json:"sender_device_id"`
+	MessageType        string `json:"message_type"`
+	Content            string `json:"content"`
+	ServerReceivedAtMs int64  `json:"server_received_at_ms"`
+	CreatedAt          string `json:"created_at"`
+	TraceID            string `json:"trace_id"`
 }) {
 	payload := map[string]interface{}{
-		"server_message_id": p.ServerMessageID,
-		"conversation_id":   p.ConversationID,
-		"conversation_seq":  p.ConversationSeq,
-		"sender_user_id":    p.SenderUserID,
-		"sender_device_id":  p.SenderDeviceID,
-		"message_type":      p.MessageType,
-		"content":           p.Content,
+		"server_message_id":     p.ServerMessageID,
+		"conversation_id":       p.ConversationID,
+		"conversation_seq":      p.ConversationSeq,
+		"sender_user_id":        p.SenderUserID,
+		"sender_device_id":      p.SenderDeviceID,
+		"message_type":          p.MessageType,
+		"content":               p.Content,
 		"server_received_at_ms": p.ServerReceivedAtMs,
+		"trace_id":              p.TraceID,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	if err := s.sync.AppendEvent(ctx, userID, domain.EventTypeMessageCreated, payloadJSON); err != nil {

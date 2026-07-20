@@ -128,6 +128,8 @@ curl http://localhost:8081/health
 - `go test ./internal/conversations -count=1`：通过
 - `go test ./internal/sync -count=1`：通过
 - `go test ./internal/receipts -run TestProcessReadAckCreatesOutboxAndProjectsReadState -count=1`：通过
+- `./scripts/phase1-realtime-delivery.sh`：通过
+- `./scripts/phase1-read-receipt.sh`：通过
 - `make dev`：在当前环境失败，原因是缺少 `docker` 命令
 - 本机服务模式：通过
 - `./scripts/phase1-smoke.sh`：通过
@@ -152,18 +154,18 @@ curl http://localhost:8081/health
 - direct conversation 下的消息发送、幂等重发、会话摘要、同步事件、消息补拉这条 HTTP 主链路可验证
 - Gateway 节点能够通过 gRPC `DeliverMessage` 把 Delivery 下发为 WebSocket `MESSAGE_DELIVERY` 帧
 - Gateway 能把 `ACK(read)` 转发到 Message Service，且 `read_receipt` 消费后会把阅读者 `unread_count` 置 0，并写出 `message_read` / `conversation_updated` sync events
+- `phase1-realtime-delivery.sh` 已把 `Outbox -> Fanout -> gRPC Gateway -> WebSocket` 固定为可重复 runbook，并校验 delivery trace 透传
+- `phase1-read-receipt.sh` 已把 `WebSocket ACK(read) -> gRPC Message Service -> Outbox Consumer -> sync_events` 固定为可重复 runbook，并校验 A 的 `message_read`、B 其他设备的 `conversation_updated`、`MAX(last_read_seq)` 收敛示例和 `/metrics` 指标名
 - Gateway 的旧连接替换和心跳续租已有固定自动化测试
 - Outbox 的指数退避、stale processing 接管、原子领取已有固定自动化测试
 - 会话摘要的成员列表、未读累计、分页与空数组行为已有固定自动化测试
 - Sync API 的分页读取、latest_event_seq 返回与 cursor 单调前进已有固定自动化测试
-- HTTP 请求日志已生成或透传 `trace_id`，并可通过响应头观察
+- HTTP、gRPC、outbox payload 与 WebSocket frame 已具备 `trace_id` 透传
 
 ### 未通过部分
 
-- Outbox -> Fanout -> Gateway -> WebSocket 的进程级完整验收还未作为固定 runbook 关闭
-- ACK / read receipt 的进程级端到端 runbook 尚未跑通，当前通过证据仍以自动化测试为主
-- 多端已读收敛仍未验证“设备 2 从 50 收敛到 100”这类 MAX 规则端到端行为
-- `make test` 仍然缺少覆盖主要 Phase 1 接缝的自动化测试资产
+- 父票 0001 仍未完全关闭，因为“Outbox 重试不丢消息”与“重连退避”这两条外层里程碑标准尚未形成固定 runbook 或自动化验收
+- `make test` 仍然缺少覆盖全部父票外层标准的自动化测试资产
 
 因此，当前不能声明：
 
@@ -174,7 +176,6 @@ curl http://localhost:8081/health
 
 若要把 Phase 1 从“部分交付已验证”推进到“整体验收通过”，最小增量应是：
 
-1. 补一条覆盖 `Outbox -> Gateway -> WebSocket` 的进程级集成验证
-2. 补齐 ACK -> Message Service -> receipt / read path
-3. 为 `POST /v1/messages/send`、`GET /v1/sync/events`、`GET /v1/conversations/{cid}/messages` 增加自动化测试
-4. 为 read receipt、多端已读收敛和 WebSocket 心跳补集成测试
+1. 补一条覆盖 “Outbox 重试不丢消息” 的固定 runbook 或自动化测试
+2. 补一条覆盖 “重连退避” 的固定 runbook 或自动化测试
+3. 为 `POST /v1/messages/send`、`GET /v1/sync/events`、`GET /v1/conversations/{cid}/messages` 继续补齐边界自动化测试

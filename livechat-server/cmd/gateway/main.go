@@ -13,6 +13,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/gateway"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	syncsvc "github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
 	"google.golang.org/grpc"
@@ -82,6 +83,7 @@ func main() {
 	// HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", gwMgr.HandleUpgrade)
+	mux.Handle("GET /metrics", metrics.Handler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","active_sessions":` +

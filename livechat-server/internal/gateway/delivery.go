@@ -12,12 +12,12 @@ import (
 var ErrSessionNotFound = errors.New("gateway session not found")
 
 // DeliverToDevice pushes a MESSAGE_DELIVERY frame to the target session.
-func (m *Manager) DeliverToDevice(userID int64, deviceID string, msg *livechat.WsMessageDelivery) error {
+func (m *Manager) DeliverToDevice(userID int64, deviceID string, msg *livechat.WsMessageDelivery, traceID string) error {
 	sess := m.GetSession(userID, deviceID)
 	if sess == nil {
 		return ErrSessionNotFound
 	}
-	return sess.Send(OpMessageDelivery, msg)
+	return sess.SendWithTrace(OpMessageDelivery, msg, traceID)
 }
 
 // DeliveryService exposes the spec-defined Gateway gRPC delivery endpoint.
@@ -37,7 +37,7 @@ func (s *DeliveryService) DeliverMessage(ctx context.Context, req *livechat.Deli
 	if req.GetDeviceId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "device_id is required")
 	}
-	if err := s.manager.DeliverToDevice(req.GetUserId(), req.GetDeviceId(), req.GetMessage()); err != nil {
+	if err := s.manager.DeliverToDevice(req.GetUserId(), req.GetDeviceId(), req.GetMessage(), req.GetTraceId()); err != nil {
 		if errors.Is(err, ErrSessionNotFound) {
 			s.manager.unregisterRoute(context.Background(), req.GetUserId(), req.GetDeviceId())
 			return nil, status.Error(codes.NotFound, "gateway session not found")

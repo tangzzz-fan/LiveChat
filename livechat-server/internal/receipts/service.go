@@ -10,6 +10,7 @@ import (
 
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 )
 
@@ -29,6 +30,7 @@ type AckRequest struct {
 	ConversationID string
 	LastReadSeq    int64
 	AckedAtMs      int64
+	TraceID        string
 }
 
 type ReadReceiptPayload struct {
@@ -37,6 +39,7 @@ type ReadReceiptPayload struct {
 	ConversationID string `json:"conversation_id"`
 	LastReadSeq    int64  `json:"last_read_seq"`
 	AckedAtMs      int64  `json:"acked_at_ms"`
+	TraceID        string `json:"trace_id"`
 }
 
 func NewService(db *sql.DB, syncSvc *sync.Service, convSvc *conversations.Service) *Service {
@@ -84,6 +87,7 @@ func (s *Service) enqueueReadReceipt(ctx context.Context, req AckRequest) error 
 		ConversationID: req.ConversationID,
 		LastReadSeq:    req.LastReadSeq,
 		AckedAtMs:      req.AckedAtMs,
+		TraceID:        req.TraceID,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -101,6 +105,7 @@ func (s *Service) enqueueReadReceipt(ctx context.Context, req AckRequest) error 
 	if err != nil {
 		return fmt.Errorf("insert read receipt outbox event: %w", err)
 	}
+	metrics.OutboxEventsCreated.Add(1)
 	return nil
 }
 
@@ -113,6 +118,7 @@ func (s *Service) ConsumeReadReceipt(ctx context.Context, payload ReadReceiptPay
 		"conversation_id": payload.ConversationID,
 		"unread_count":    0,
 		"last_read_seq":   payload.LastReadSeq,
+		"trace_id":        payload.TraceID,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal conversation_updated payload: %w", err)
@@ -136,6 +142,7 @@ func (s *Service) ConsumeReadReceipt(ctx context.Context, payload ReadReceiptPay
 		"conversation_id": payload.ConversationID,
 		"reader_user_id":  payload.ReaderUserID,
 		"last_read_seq":   payload.LastReadSeq,
+		"trace_id":        payload.TraceID,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal message_read payload: %w", err)

@@ -4,16 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 )
 
 // Service handles the message send write path.
 type Service struct {
-	db       *sql.DB
+	db          *sql.DB
 	convUpdater ConversationUpdater
 }
 
@@ -39,6 +40,7 @@ type SendRequest struct {
 	SenderDeviceID  string
 	MessageType     string
 	Content         string // JSON-encoded payload
+	TraceID         string
 }
 
 // SendResult is returned after a successful (or idempotent) send.
@@ -79,15 +81,16 @@ func (s *Service) Send(ctx context.Context, req SendRequest) (*SendResult, error
 	// 4. Build outbox payload
 	now := time.Now()
 	payload := map[string]interface{}{
-		"server_message_id": serverMsgID,
-		"conversation_id":   req.ConversationID,
-		"conversation_seq":  seq,
-		"sender_user_id":    req.SenderUserID,
-		"sender_device_id":  req.SenderDeviceID,
-		"message_type":      req.MessageType,
-		"content":           req.Content,
+		"server_message_id":     serverMsgID,
+		"conversation_id":       req.ConversationID,
+		"conversation_seq":      seq,
+		"sender_user_id":        req.SenderUserID,
+		"sender_device_id":      req.SenderDeviceID,
+		"message_type":          req.MessageType,
+		"content":               req.Content,
 		"server_received_at_ms": now.UnixMilli(),
-		"created_at":        now.Format(time.RFC3339Nano),
+		"created_at":            now.Format(time.RFC3339Nano),
+		"trace_id":              req.TraceID,
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -163,6 +166,7 @@ func (s *Service) Send(ctx context.Context, req SendRequest) (*SendResult, error
 	if err != nil {
 		return nil, fmt.Errorf("insert outbox: %w", err)
 	}
+	metrics.OutboxEventsCreated.Add(1)
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)

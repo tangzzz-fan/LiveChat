@@ -1,8 +1,8 @@
 ---
 id: "0006"
 title: "实时投递（Fanout）：Outbox → Gateway → WebSocket 推送"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0004", "0005"]
 created_at: 2026-07-20
@@ -39,9 +39,9 @@ created_at: 2026-07-20
 ## Current implementation status
 
 - 已实现：`internal/fanout/service.go` 已有 conversation member 查询、在线设备扫描、同步事件写入；`GET /v1/conversations/{cid}/messages` 已可工作并被 smoke 验证。
-- 已新增：Gateway 已暴露 `GatewayDeliveryService.DeliverMessage` gRPC 服务，`outbox-consumer` 已改为通过 gRPC client 向目标 Gateway 节点投递 `WsMessageDelivery` protobuf；`DeliverToDevice()` 负责最终 WebSocket 下发。
-- 已验证：`go test ./internal/gateway -run TestGatewayDeliversPublishedMessageToConnectedDevice -count=1` 已改为覆盖 gRPC `DeliverMessage` → WebSocket `MESSAGE_DELIVERY` 路径；离线或未连接设备仍可通过 `sync_events` + 补拉接口拿到消息；发送方自己不会被加入投递目标。
-- 未完成：仍缺少覆盖 `Outbox -> Fanout -> gRPC Gateway -> WebSocket` 的固定 runbook / 进程级集成验收，因此本票仍处于进行中而非关闭。
+- 已实现：Gateway 已暴露 `GatewayDeliveryService.DeliverMessage` gRPC 服务，`outbox-consumer` 已改为通过 gRPC client 向目标 Gateway 节点投递 `WsMessageDelivery` protobuf；`DeliverToDevice()` 负责最终 WebSocket 下发。
+- 已验证：`go test ./internal/gateway -run TestGatewayDeliversPublishedMessageToConnectedDevice -count=1` 覆盖 gRPC `DeliverMessage` → WebSocket `MESSAGE_DELIVERY` 路径；`./scripts/phase1-realtime-delivery.sh` 已固定验证 `Outbox -> Fanout -> gRPC Gateway -> WebSocket` 进程级链路、离线 `sync_events` 回退和 trace 透传。
+- 结论：本票的实现与验收已经闭环，可视为完成态。
 
 ## Blocked by
 

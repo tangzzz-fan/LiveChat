@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -35,7 +36,11 @@ type Session struct {
 
 // Send writes a frame to the WebSocket connection (thread-safe).
 func (s *Session) Send(opcode uint32, msg proto.Message) error {
-	frame, err := NewFrame(opcode, msg)
+	return s.SendWithTrace(opcode, msg, "")
+}
+
+func (s *Session) SendWithTrace(opcode uint32, msg proto.Message, traceID string) error {
+	frame, err := NewFrameWithTrace(opcode, msg, traceID)
 	if err != nil {
 		return err
 	}
@@ -167,6 +172,8 @@ func (m *Manager) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	m.sessions[sessionID] = sess
 	m.mu.Unlock()
+	metrics.WSActiveConnections.Add(1)
+	metrics.WSConnectionsTotal.Add(1)
 
 	// Register route in Redis
 	m.registerRoute(ctx, userID, deviceID, sessionID)
@@ -262,7 +269,7 @@ func (m *Manager) handleFrame(sess *Session, frame *livechat.WsFrame) {
 			"event_seq", ackMsg.EventSeq,
 		)
 		if m.ackFwd != nil {
-			if err := m.ackFwd.ForwardAck(sess.ctx, sess.UserID, sess.DeviceID, ackMsg); err != nil {
+			if err := m.ackFwd.ForwardAck(sess.ctx, sess.UserID, sess.DeviceID, ackMsg, frame.GetTraceId()); err != nil {
 				slog.Error("forward ack", "session_id", sess.ID, "error", err)
 			}
 		}
@@ -287,6 +294,7 @@ func (m *Manager) removeSession(sess *Session) {
 	m.mu.Unlock()
 	if ok && current == sess {
 		m.unregisterRoute(context.Background(), sess.UserID, sess.DeviceID)
+		metrics.WSActiveConnections.Add(-1)
 	}
 }
 
@@ -335,6 +343,7 @@ func (m *Manager) checkStale() {
 
 	for _, sess := range stale {
 		slog.Info("closing stale session", "session_id", sess.ID, "user_id", sess.UserID)
+		metrics.WSHeartbeatTimeouts.Add(1)
 		sess.SendError(4003, "connection timeout", true)
 		sess.Close()
 	}

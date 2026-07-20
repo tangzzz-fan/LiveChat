@@ -20,6 +20,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/traceutil"
 )
 
 // Router builds the HTTP handler tree for Message Service.
@@ -303,6 +304,7 @@ func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 			SenderDeviceID:  deviceID,
 			MessageType:     req.MessageType,
 			Content:         req.Content,
+			TraceID:         TraceIDFromContext(r.Context()),
 		})
 		if err != nil {
 			if errors.Is(err, messages.ErrNotMember) {
@@ -314,6 +316,7 @@ func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 			return
 		}
 
+		metrics.MessagesSentTotal.Add(1)
 		writeJSON(w, http.StatusOK, result)
 	}
 }
@@ -490,12 +493,11 @@ func DeviceIDFromContext(ctx context.Context) string {
 }
 
 func WithTraceID(ctx context.Context, traceID string) context.Context {
-	return context.WithValue(ctx, contextKey("trace_id"), traceID)
+	return traceutil.WithTraceID(ctx, traceID)
 }
 
 func TraceIDFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(contextKey("trace_id")).(string)
-	return v
+	return traceutil.TraceIDFromContext(ctx)
 }
 
 func errorResponse(msg string) map[string]interface{} {
@@ -721,20 +723,33 @@ func withLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		traceID := r.Header.Get("X-Trace-Id")
 		if traceID == "" {
-			traceID = generateTraceID(r)
+			traceID = generateTraceID()
 		}
 		w.Header().Set("X-Trace-Id", traceID)
-		next.ServeHTTP(w, r.WithContext(WithTraceID(r.Context(), traceID)))
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r.WithContext(WithTraceID(r.Context(), traceID)))
+		metrics.ObserveHTTPRequest(r.Method, r.URL.Path, rec.status, time.Since(start))
 		slog.Info("request",
 			"trace_id", traceID,
 			"method", r.Method,
 			"path", r.URL.Path,
+			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
 	})
 }
 
-func generateTraceID(r *http.Request) string {
-	sum := sha256.Sum256([]byte(r.Method + "|" + r.URL.Path + "|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+func generateTraceID() string {
+	sum := sha256.Sum256([]byte(traceutil.Generate() + "|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
 	return hex.EncodeToString(sum[:8])
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
 }

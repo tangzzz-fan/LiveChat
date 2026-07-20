@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/fanout"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/outbox"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/receipts"
 	syncsvc "github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
@@ -104,11 +106,26 @@ func main() {
 		return receiptSvc.ConsumeReadReceipt(ctx, payload)
 	})
 
+	metricsSrv := &http.Server{
+		Addr:    ":8082",
+		Handler: metrics.Handler(func() map[string]int64 { return consumer.Metrics(context.Background()) }),
+	}
+	go func() {
+		slog.Info("outbox metrics server starting", "addr", metricsSrv.Addr)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("outbox metrics server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
 	slog.Info("outbox-consumer starting")
 	if err := consumer.Run(ctx); err != nil && err != context.Canceled {
 		slog.Error("consumer error", "error", err)
 		os.Exit(1)
 	}
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelShutdown()
+	_ = metricsSrv.Shutdown(shutdownCtx)
 	slog.Info("outbox-consumer stopped")
 }
 
@@ -151,6 +168,7 @@ func (d *grpcDeliverer) DeliverMessage(ctx context.Context, userID int64, device
 			Content:            payload.Content,
 			ServerReceivedAtMs: payload.ServerReceivedAtMs,
 		},
+		TraceId: payload.TraceID,
 	})
 	return err
 }

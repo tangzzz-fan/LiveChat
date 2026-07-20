@@ -7,8 +7,8 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/protobuf/proto"
 	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Opcode constants from Spec 05 §3.2.
@@ -121,6 +121,10 @@ func WriteFrame(w io.Writer, frame *livechat.WsFrame) error {
 
 // NewFrame creates a WsFrame with the given opcode and payload.
 func NewFrame(opcode uint32, payload proto.Message) (*livechat.WsFrame, error) {
+	return NewFrameWithTrace(opcode, payload, "")
+}
+
+func NewFrameWithTrace(opcode uint32, payload proto.Message, traceID string) (*livechat.WsFrame, error) {
 	raw, err := proto.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -129,6 +133,7 @@ func NewFrame(opcode uint32, payload proto.Message) (*livechat.WsFrame, error) {
 		Version: ProtocolVersion,
 		Opcode:  opcode,
 		Payload: raw,
+		TraceId: traceID,
 	}, nil
 }
 

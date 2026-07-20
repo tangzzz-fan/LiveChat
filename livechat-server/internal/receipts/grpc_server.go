@@ -26,6 +26,7 @@ func (s *GRPCServer) ProcessAck(ctx context.Context, req *livechat.ProcessAckReq
 		ConversationID: req.GetConversationId(),
 		LastReadSeq:    int64(req.GetLastReadSeq()),
 		AckedAtMs:      NormalizeAckedAt(int64(req.GetAckedAtMs())),
+		TraceID:        req.GetTraceId(),
 	})
 	if err != nil {
 		if err == ErrUnsupportedAckType {

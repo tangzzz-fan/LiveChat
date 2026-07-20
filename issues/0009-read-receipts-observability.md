@@ -1,8 +1,8 @@
 ---
 id: "0009"
 title: "已读回执 + 多端一致性收敛 + 可观测性"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0006", "0007"]
 created_at: 2026-07-20
@@ -40,11 +40,10 @@ created_at: 2026-07-20
 
 ## Current implementation status
 
-- 已部分实现：`GET /metrics` 端点已存在，ConversationSummary 侧有 `MarkRead()`；Gateway 现在通过 `MessageAckService.ProcessAck` gRPC 将 `ACK(read)` 上送到 Message Service；Message Service 已能把 `ACK(read)` 写成 `read_receipt` outbox 事件；Outbox Consumer 已能消费 `read_receipt` 并写出 `message_read` / `conversation_updated` sync events；HTTP 入口已自动生成或透传 `trace_id`；`sync_events` 已支持按截止时间清理，并提供 `make cleanup-sync-events` 手动触发命令。
-- 已验证：`TestGatewayForwardsReadAckToMessageService` 已改为覆盖 WebSocket ACK → gRPC `ProcessAck` 路径；`TestProcessReadAckCreatesOutboxAndProjectsReadState` 覆盖 `read_receipt` -> `unread_count=0` -> sync events 的最小业务闭环。
-- 已新增验证：`internal/api/router_test.go` 覆盖 `trace_id` 生成与透传；`internal/sync/service_test.go` 覆盖 30 天清理接口只删除过期 `sync_events`。
-- 未完成：仍缺真实进程级 runbook 证明 `WebSocket ACK -> Gateway -> gRPC Message Service -> Outbox Consumer -> sync_events` 整条链路；多端 `MAX(last_read_seq)` 收敛没有端到端验收；`trace_id` 还没有贯通到 gRPC / outbox / WebSocket 全链路，因此本票仍未关闭。
-- 结论：本票已从“几乎纯占位”推进到“最小已读闭环已存在”，但还不能关闭，仍是 Phase 1 剩余的核心收口项之一。
+- 已实现：Gateway 通过 `MessageAckService.ProcessAck` gRPC 将 `ACK(read)` 上送到 Message Service；Message Service 会写入 `read_receipt` outbox 事件；Outbox Consumer 会消费该事件并写出 `message_read` / `conversation_updated` sync events；HTTP、gRPC、outbox payload 与 WebSocket frame 已具备 `trace_id` 传播；`sync_events` 已支持 30 天清理，并提供 `make cleanup-sync-events` 手动触发命令。
+- 已验证：`TestGatewayForwardsReadAckToMessageService` 覆盖 WebSocket ACK → gRPC `ProcessAck`；`TestProcessReadAckCreatesOutboxAndProjectsReadState` 覆盖 `read_receipt` -> `unread_count=0` -> sync events 的最小业务闭环；`internal/api/router_test.go` 覆盖 `trace_id` 生成与透传；`internal/sync/service_test.go` 覆盖 30 天清理接口只删除过期 `sync_events`。
+- 已新增验证：`./scripts/phase1-read-receipt.sh` 已固定验证 `WebSocket ACK -> Gateway -> gRPC Message Service -> Outbox Consumer -> sync_events` 进程级链路、B 自己 `unread_count=0`、B 其他设备收到 `conversation_updated`、A 收到 `message_read`、`MAX(last_read_seq)` 收敛示例，以及 `/metrics` 指标名存在。
+- 结论：本票已从“最小已读闭环”推进到“实现 + 进程级验收 + 可观测性”闭环，可视为完成态。
 
 ## Blocked by
 

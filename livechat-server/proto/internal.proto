@@ -10,6 +10,7 @@ message DeliverMessageRequest {
     int64 user_id = 1;
     string device_id = 2;
     livechat.ws.WsMessageDelivery message = 3;
+    string trace_id = 4;
 }
 
 message DeliverMessageResponse {}
@@ -26,6 +27,7 @@ message ProcessAckRequest {
     string conversation_id = 5;
     uint64 last_read_seq = 6;
     uint64 acked_at_ms = 7;
+    string trace_id = 8;
 }
 
 message ProcessAckResponse {

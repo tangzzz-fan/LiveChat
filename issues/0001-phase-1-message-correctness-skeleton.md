@@ -25,9 +25,10 @@ created_at: 2026-07-20
 - 已验证：`make build` 可通过，`make test` 可执行，`./scripts/phase1-smoke.sh` 可验证 direct conversation 下的注册、消息发送、幂等重发、会话摘要、同步事件和消息补拉。
 - 已新增验证：Gateway 已有 `MESSAGE_DELIVERY` 自动化测试，证明连接成功的 Device 可以接收实时投递帧。
 - 已新增验证：`ACK(read)` 已有转发与业务投影测试，证明 Gateway 能把 ACK 转发到 Message Service，且 `read_receipt` 会把已读状态投影为 `message_read` / `conversation_updated` sync events。
+- 已新增验证：`./scripts/phase1-realtime-delivery.sh` 已固定验证 `curl send -> Outbox -> Fanout -> gRPC Gateway -> WebSocket MESSAGE_DELIVERY`；`./scripts/phase1-read-receipt.sh` 已固定验证 `WebSocket ACK(read) -> gRPC Message Service -> Outbox Consumer -> sync_events`、B 的 `unread_count=0`、A 的 `message_read`、B 其他设备的 `conversation_updated` 和 `MAX(last_read_seq)` 收敛示例。
 - 已实现：`Message Service`、`Gateway`、`Outbox Consumer`、`Sync Service` 的基础代码骨架已经存在，并可在本机 PostgreSQL/Redis 环境下运行。
-- 未完成：父票要求的“消息发送 -> 投递 -> 已读”整条闭环仍未打通，因此本票不能关闭。
-- 当前阻塞点集中在 `0006` 和 `0009`：`0006` 已完成节点内实时投递，但还缺进程级完整验收；`0009` 已有最小 ACK/read 闭环，但多端已读收敛和进程级完整验收仍未完成。
+- 未完成：父票的“消息发送 -> 投递 -> 已读”主链路已经打通，但里程碑验证标准里仍剩两条外层能力未形成固定收口：`5. Outbox 重试不丢消息` 和 `6. 重连退避`。
+- 当前剩余阻塞点已从 `0006/0009` 收缩为父票自身的外层标准，而不再是主链路闭环缺失。
 
 ## Solution
 
