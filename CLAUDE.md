@@ -76,4 +76,5 @@ Issues 使用 GitHub Issues，外部 PR 不作为 triage request surface。见 `
 - 创建新实现目录时，名称与职责必须能映射回对应 spec。
 - 生成代码、测试、脚本或文档时，优先复用 `CONTEXT.md` 中的术语，避免同义词漂移。
 - 评审或重构前，先读对应 spec，再读 `CONTEXT.md` 与相关 ADR。
+- 命令行中需要通过代理访问外网时，使用 `proxy_on` 开启代理。
 - 新实现的能力/模块如果涉及通用工程问题，应同步更新 `docs/engineering-problems/` 并更新 INDEX.md。问题库使用统一模板：问题是什么 → 通用分析思路 → 当前方案 → 替代方案及取舍 → 踩坑记录。
