@@ -52,3 +52,5 @@ secrets/
 deploy/data/
 deploy/prometheus/data/
 deploy/grafana/data/
+.claude/
+.agents/

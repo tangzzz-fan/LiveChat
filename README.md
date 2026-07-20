@@ -1,103 +1,65 @@
 # LiveChat
 
-WhatsApp 级架构的即时通讯系统——iOS 客户端 + Go 后端。目的不是做产品，而是**通过亲手实现来学习大规模 IM 的经典问题**。
+LiveChat 是一个面向学习的大规模即时通信系统设计项目，目标是通过规格先行的方式，系统化拆解 WhatsApp 类聊天系统的核心问题：消息正确性、长连接、离线同步、多端一致性、群聊扇出、媒体消息、推送唤醒、安全边界与可观测性。
 
-## 学习目标
+当前仓库处于规格驱动阶段，核心设计内容集中在 `Specs/` 目录。代码目录会在后续按规格推进逐步落地。
 
-| 课题 | 具体问题 |
-|------|---------|
-| 长连接 | 单机 10w+ WebSocket 连接、心跳风暴、重连雪崩 |
-| 消息可靠性 | 不丢、不重、不乱序——at-least-once + 幂等 = exactly-once |
-| 离线同步 | 收件箱模型 + 游标增量拉取 + APNs 推拉结合 |
-| 群聊 | 扇出放大、写扩散 vs 读扩散、异步 worker |
-| 状态广播 | N×M presence 风暴治理、订阅模型、数据分级 |
-| 移动端 | local-first 架构、iOS 后台保活、乐观发送 |
-| 端到端加密 | Signal Protocol：X3DH + Double Ratchet + Sender Keys |
-| 流式渲染 | 200 tok/s 打字机效果、TextKit 2 增量排版、帧级合批 |
-| 端侧 AI | Foundation Models、语义搜索、资源纪律 |
+## 当前仓库结构
 
-## 架构全景
-
-```
-┌─────────────┐   WebSocket+Protobuf   ┌──────────────────────────────────────┐
-│  iOS App    │◄──────────────────────►│  Gateway (Go, 无状态, 可横向扩展 xN)   │
-│ SwiftUI     │                        │  连接管理/心跳/鉴权/编解码              │
-│ GRDB 本地库 │      HTTPS (REST)      └──────┬───────────────────────▲───────┘
-│ 同步引擎    │◄──────────┐                   │ gRPC                  │ push RPC
-└─────────────┘           │                   ▼                       │
-                   ┌──────┴──────┐    ┌──────────────────┐    ┌───────┴────────┐
-                   │  API 服务    │    │  Message Service │───►│  Redis         │
-                   │ 注册/登录     │    │  收发/去重/定序    │    │  路由表(user→gw)│
-                   │ 会话/联系人   │    │  收件箱写扩散     │    │  在线状态/未读   │
-                   └──────┬──────┘    └────────┬─────────┘    └────────────────┘
-                          │                    │
-                          ▼                    ▼
-                   ┌────────────────────────────────┐   ┌───────────────┐
-                   │  PostgreSQL（messages 按会话+   │   │  Push Worker  │
-                   │  时间分区; inbox; users; convs） │   │  → APNs       │
-                   └────────────────────────────────┘   └───────────────┘
-```
-
-## Milestones
-
-| Milestone | 范围 | 核心验收 |
-|-----------|------|---------|
-| M1 | 核心链路：1:1 聊天 | 5w 连接 30min、1,000 msg/s p99<500ms、kill-9 零丢失、飞行模式实验 |
-| M2 | 多人实时：群聊 / presence / typing / APNs | 500 人群送达 p99<1s、锁屏推送 <5s |
-| M3 | 媒体 / 多设备 / E2EE | MinIO 旁路、双设备同步、服务器盲测零明文 |
-| M4 | iOS 深度 + 端侧 AI | 流式 200 tok/s 不掉帧、飞行模式全功能可用 |
-
-## 技术栈
-
-| 层 | 选型 |
-|----|------|
-| iOS | SwiftUI, GRDB (SQLite), Swift Concurrency (actors), iOS 17+ |
-| 后端 | Go, goroutine-per-connection, gRPC, Protobuf (buf) |
-| 存储 | PostgreSQL (分区表), Redis |
-| 对象存储 | MinIO (S3 协议, M3) |
-| E2EE | libsignal (Signal Protocol, M3) |
-| 端侧 AI | Apple Foundation Models (iOS 26+, M4), Core ML 降级 |
-| 可观测 | Prometheus + Grafana |
-| 部署 | docker-compose |
-
-## 仓库结构
-
-```
+```text
 LiveChat/
-├── specs/          # 15 份架构规格文档 + 评审报告
-├── proto/          # .proto 定义（Go/Swift 共享）
-├── server/         # Go 后端（gateway / msgsvc / api / pushworker / aisvc）
-├── ios/            # SwiftUI App
-├── loadtest/       # Go 压测客户端
-└── deploy/         # docker-compose + Grafana 面板
+├── Specs/                # 核心规格文档（当前主工作区）
+├── .agents/skills/       # 已安装的本地技能库
+├── CONTEXT.md            # 项目领域术语表
+├── CLAUDE.md             # 仓库级协作与实现约束
+└── docs/
+    ├── adr/              # 架构决策记录
+    └── agents/           # Matt Pocock skills 的仓库级配置
 ```
 
-## 快速开始
+## 规格目录
 
-```bash
-# 启动全栈
-cd deploy && docker-compose up -d
+- `00-规格总览与实施规划.md`
+- `01-产品边界与SLO.md`
+- `02-领域模型与消息生命周期.md`
+- `03-账号认证、设备管理与联系人发现.md`
+- `04-消息发送主链路与Outbox模式.md`
+- `05-长连接网关与协议设计.md`
+- `06-离线同步与多端一致性.md`
+- `07-群聊模型与扇出策略.md`
+- `08-媒体消息与对象存储.md`
+- `09-推送通知与后台唤醒.md`
+- `10-安全体系与密钥管理.md`
+- `11-存储分层与分片设计.md`
+- `12-监控告警与压测方案.md`
+- `13-iOS客户端架构设计.md`
 
-# 运行压测
-cd loadtest
-go run ./cmd/loadtest --scenario scenarios/chat_1kmsg.yaml --mode correctness
+## 项目原则
 
-# iOS
-open ios/LiveChat.xcodeproj
-```
+- 先定义消息生命周期，再设计接口、存储和同步链路。
+- 先保证正确性，再追求吞吐、成本和复杂度优化。
+- 先稳定模块边界，再考虑服务拆分和基础设施扩展。
+- 所有实现修改都应先更新对应规格，再更新代码和配置。
 
-## 文档
+## 推荐阅读顺序
 
-- [SPEC-000 项目总览与 Spec 索引](specs/SPEC-000-overview.md)
-- [SPEC-001 消息协议与数据模型](specs/SPEC-001-protocol.md)
-- [全部 15 份 Spec](specs/)
-- [第一轮评审报告](specs/REVIEW-SPECS.md)
-- [第二轮评审报告](specs/REVIEW-SPECS-2.md)
-- [CLAUDE.md](CLAUDE.md)——AI 工作指引
+1. `Specs/00-规格总览与实施规划.md`
+2. `Specs/02-领域模型与消息生命周期.md`
+3. `Specs/04-消息发送主链路与Outbox模式.md`
+4. `Specs/05-长连接网关与协议设计.md`
+5. `Specs/06-离线同步与多端一致性.md`
 
-## 哲学
+这 5 份文档构成消息系统正确性骨架，是后续实现和重构的判断基线。
 
-- **验证驱动**：每个 spec 以可量化实验为验收标准，不以"代码写完了"为准
-- **先跑通再加密**：E2EE 排在 M3 最后——加密会冻结架构，先在明文下把系统调稳
-- **连接可以死，数据不能丢**：可靠性在同步层不在连接层
-- **推拉结合**：推送求快（best-effort），拉取求全（收件箱兜底）
+## Agent 协作入口
+
+- 仓库级协作规则：`CLAUDE.md`
+- 领域术语：`CONTEXT.md`
+- Skill 配置：`docs/agents/`
+- 架构决策：`docs/adr/`
+
+## 当前状态
+
+- Matt Pocock skills 已安装到 `.agents/skills/`
+- 仓库级 `README.md`、`CLAUDE.md`、`CONTEXT.md` 与 `docs/agents/` 已补齐
+- 后续实现应以 `Specs/` 为唯一设计源，避免再次漂移到旧的 `specs/SPEC-xxx` 命名体系
