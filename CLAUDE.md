@@ -6,7 +6,7 @@
 
 LiveChat 是一个以学习为导向的 WhatsApp 类即时通信系统设计项目。当前阶段以规格文档为主，先完成领域建模、链路拆解和工程边界约束，再逐步落地服务端、客户端、协议与基础设施实现。
 
-**Phase 1 (消息正确性骨架) 已部分实现，代码位于 `livechat-server/`，当前状态为 `in_progress` 而不是完成态。**
+**Phase 1 的“消息正确性骨架”父级目标已完成，代码位于 `livechat-server/`；但 Phase 1 仍有若干子票处于 `in_progress` 收尾状态，因此不能表述为“Phase 1 全部完成”。**
 
 当前仓库的设计源位于 `Specs/`，不是旧的 `specs/SPEC-xxx` 目录结构。
 
@@ -39,7 +39,8 @@ LiveChat/
 - 任何设计变更先改 spec，再改配置、脚本和代码。
 - 文档编号和主题必须与 `Specs/` 保持一致。
 - 旧的 `specs/SPEC-xxx` 路径视为历史路径，不应继续引用。
-- Phase 1 当前为 `in_progress`，已通过 HTTP 主链路 smoke 和一条 `MESSAGE_DELIVERY` 自动化测试，但整体验收未完成。
+- `0001`（消息正确性骨架）当前为 `complete`，说明 1:1 消息发送、实时投递、离线同步、已读收敛的父级目标已经具备固定 runbook 或自动化测试证据。
+- Phase 1 当前仍有子票 `0002`、`0004`、`0005`、`0007` 处于 `in_progress`，因此不能表述为“Phase 1 全部 ticket 已完成”。
 - Phase 2 票据已拆分，但整体尚未开始执行。
 
 ## 规格推进顺序
