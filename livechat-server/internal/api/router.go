@@ -7,11 +7,14 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 )
 
 // Router builds the HTTP handler tree for Message Service.
@@ -19,6 +22,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux := http.NewServeMux()
 
 	msgSvc := messages.NewService(db)
+	syncSvc := sync.NewService(db)
 
 	// Auth endpoints (public)
 	mux.HandleFunc("POST /v1/auth/register", handleRegister(db, authSvc))
@@ -30,6 +34,8 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	// Authenticated endpoints
 	authMw := newAuthMiddleware(authSvc)
 	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
+	mux.Handle("GET /v1/sync/events", authMw.Wrap(http.HandlerFunc(handleGetSyncEvents(syncSvc))))
+	mux.Handle("GET /v1/conversations/{cid}/messages", authMw.Wrap(http.HandlerFunc(handleGetMessages(syncSvc))))
 
 	return withLogging(mux)
 }
@@ -286,6 +292,105 @@ func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+// ── Sync events handler ──────────────────────────────
+
+func handleGetSyncEvents(svc *sync.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+
+		cursorStr := r.URL.Query().Get("cursor")
+		limitStr := r.URL.Query().Get("limit")
+		cursor := int64(0)
+		if cursorStr != "" {
+			var err error
+			cursor, err = strconv.ParseInt(cursorStr, 10, 64)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse("invalid cursor"))
+				return
+			}
+		}
+		limit := 100
+		if limitStr != "" {
+			if n, err := strconv.Atoi(limitStr); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+
+		events, latestSeq, err := svc.GetEvents(r.Context(), userID, cursor, limit)
+		if err != nil {
+			slog.Error("get sync events", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		hasMore := len(events) >= limit
+		if events == nil {
+			events = make([]domain.SyncEvent, 0)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"events":            events,
+			"has_more":          hasMore,
+			"latest_event_seq":  latestSeq,
+			"server_time_ms":    time.Now().UnixMilli(),
+		})
+	}
+}
+
+// ── Conversation messages handler ────────────────────
+
+func handleGetMessages(svc *sync.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		cid := r.PathValue("cid")
+
+		fromSeqStr := r.URL.Query().Get("from_seq")
+		limitStr := r.URL.Query().Get("limit")
+
+		fromSeq := int64(0)
+		if fromSeqStr != "" {
+			var err error
+			fromSeq, err = strconv.ParseInt(fromSeqStr, 10, 64)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse("invalid from_seq"))
+				return
+			}
+		}
+		limit := 50
+		if limitStr != "" {
+			if n, err := strconv.Atoi(limitStr); err == nil && n > 0 && n <= 100 {
+				limit = n
+			}
+		}
+
+		// Verify membership
+		ok, err := svc.VerifyMembership(r.Context(), userID, cid)
+		if err != nil {
+			slog.Error("check membership", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusForbidden, errorResponse("not a member of this conversation"))
+			return
+		}
+
+		messages, err := svc.GetMessages(r.Context(), cid, fromSeq, limit)
+		if err != nil {
+			slog.Error("get messages", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		if messages == nil {
+			messages = make([]domain.Message, 0)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"messages": messages,
+		})
 	}
 }
 
