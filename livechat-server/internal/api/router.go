@@ -4,17 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
 )
 
 // Router builds the HTTP handler tree for Message Service.
 func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handler {
 	mux := http.NewServeMux()
+
+	msgSvc := messages.NewService(db)
 
 	// Auth endpoints (public)
 	mux.HandleFunc("POST /v1/auth/register", handleRegister(db, authSvc))
@@ -23,9 +27,9 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	// Health
 	mux.HandleFunc("GET /health", handleHealth(db, rdb))
 
-	// Authenticated endpoints (stubs for now)
+	// Authenticated endpoints
 	authMw := newAuthMiddleware(authSvc)
-	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(db))))
+	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
 
 	return withLogging(mux)
 }
@@ -235,11 +239,53 @@ func handleLogin(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 	}
 }
 
-// ── Stub handler (to be replaced in ticket 0003) ─────
+// ── Message send handler ────────────────────────────
 
-func handleSendMessage(db *sql.DB) http.HandlerFunc {
+type sendMessageRequest struct {
+	ClientMessageID string `json:"client_message_id"`
+	ConversationID  string `json:"conversation_id"`
+	MessageType     string `json:"message_type"`
+	Content         string `json:"content"`
+}
+
+func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotImplemented, errorResponse("not yet implemented"))
+		var req sendMessageRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+
+		if req.ClientMessageID == "" || req.ConversationID == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("client_message_id and conversation_id are required"))
+			return
+		}
+		if req.MessageType == "" {
+			req.MessageType = "text"
+		}
+
+		userID := UserIDFromContext(r.Context())
+		deviceID := DeviceIDFromContext(r.Context())
+
+		result, err := svc.Send(r.Context(), messages.SendRequest{
+			ClientMessageID: req.ClientMessageID,
+			ConversationID:  req.ConversationID,
+			SenderUserID:    userID,
+			SenderDeviceID:  deviceID,
+			MessageType:     req.MessageType,
+			Content:         req.Content,
+		})
+		if err != nil {
+			if errors.Is(err, messages.ErrNotMember) {
+				writeJSON(w, http.StatusForbidden, errorResponse("you are not a member of this conversation"))
+				return
+			}
+			slog.Error("send message", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to send message"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 
