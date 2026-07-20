@@ -96,6 +96,20 @@ Issues 使用本地 `issues/` 目录（不依赖 GitHub Issues）。见 `docs/ag
 - 每完成一个 ticket，更新 `issues/INDEX.md` 中的状态
 - 实现完成后打 annotated tag
 
+### Phase 推进流程
+
+每个新 Phase 开始前：
+
+1. **读 spec**：重读该 Phase 对应的 spec 文档，确认 P0 范围和已实现的基础。
+2. **拆 ticket**：按 spec 的 P0 交付物拆成独立可验证的垂直切片。
+   - 每个 ticket 有明确的 Acceptance Criteria（可演示的端到端行为）。
+   - ticket 之间标注依赖关系（blocked_by）。
+   - ticket 编号从上一个 Phase 的最大编号 +1 开始递增。
+3. **审阅拆分**：向用户展示拆分方案，确认粒度、依赖和 HITL/AFK 标记后执行。
+4. **发布 issues**：在 `issues/` 目录下创建对应文件，更新 `INDEX.md`。
+5. **按序实现**：按依赖顺序逐个实现 ticket，每个 ticket 一个 commit。
+6. **Phase 验收**：全部 ticket 完成后，打 annotated tag（格式：`v0.<n>.0-p0`）。
+
 ## 协作要求
 
 - 变更任何配置、脚本、说明文档前，先检查是否仍引用旧路径或旧命名。
