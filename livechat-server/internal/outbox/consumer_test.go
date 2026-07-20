@@ -113,6 +113,95 @@ func TestProcessEventFailureReturnsEventToPending(t *testing.T) {
 	}
 }
 
+func TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss(t *testing.T) {
+	db := openOutboxTestDB(t)
+	ctx := context.Background()
+
+	id := seedOutboxEvent(t, db, "processing", 0, time.Now())
+	t.Cleanup(func() { cleanupOutboxEvent(t, db, id) })
+
+	consumer := NewConsumer(db, Config{BatchSize: 10, MaxRetries: 10})
+	attempts := 0
+	consumer.RegisterHandler("message_created", func(context.Context, Event) error {
+		attempts++
+		if attempts == 1 {
+			return errors.New("transient downstream outage")
+		}
+		return nil
+	})
+
+	originalSleep := sleepFn
+	originalRand := randFloat
+	sleepFn = func(time.Duration) {}
+	randFloat = func() float64 { return 0.5 }
+	t.Cleanup(func() {
+		sleepFn = originalSleep
+		randFloat = originalRand
+	})
+
+	consumer.processEvent(ctx, 0, Event{
+		ID:            id,
+		AggregateType: "message",
+		AggregateID:   "agg-1",
+		EventType:     "message_created",
+		Status:        "processing",
+		RetryCount:    0,
+	})
+
+	assertOutboxStatus(t, db, id, "pending")
+
+	var retryCount int
+	var processedAt sql.NullTime
+	if err := db.QueryRowContext(ctx,
+		`SELECT retry_count, processed_at FROM outbox_events WHERE id=$1`,
+		id,
+	).Scan(&retryCount, &processedAt); err != nil {
+		t.Fatalf("query retried event: %v", err)
+	}
+	if retryCount != 1 {
+		t.Fatalf("expected retry_count 1 after transient failure, got %d", retryCount)
+	}
+	if processedAt.Valid {
+		t.Fatalf("expected processed_at to be reset before retry claim")
+	}
+
+	events, err := consumer.fetchPending(ctx)
+	if err != nil {
+		t.Fatalf("fetchPending after retry: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event claimed for recovery, got %d", len(events))
+	}
+	if events[0].ID != id {
+		t.Fatalf("expected event %d to be retried, got %d", id, events[0].ID)
+	}
+	if events[0].RetryCount != 1 {
+		t.Fatalf("expected claimed retry_count 1, got %d", events[0].RetryCount)
+	}
+
+	consumer.processEvent(ctx, 0, events[0])
+
+	var status string
+	if err := db.QueryRowContext(ctx,
+		`SELECT status, retry_count, processed_at FROM outbox_events WHERE id=$1`,
+		id,
+	).Scan(&status, &retryCount, &processedAt); err != nil {
+		t.Fatalf("query recovered event: %v", err)
+	}
+	if status != "done" {
+		t.Fatalf("expected recovered event status done, got %s", status)
+	}
+	if retryCount != 1 {
+		t.Fatalf("expected retry_count to stay 1 after recovery, got %d", retryCount)
+	}
+	if !processedAt.Valid {
+		t.Fatalf("expected processed_at to be set after successful retry")
+	}
+	if attempts != 2 {
+		t.Fatalf("expected handler to run twice, got %d attempts", attempts)
+	}
+}
+
 func TestReapStaleResetsOnlyExpiredProcessingToPending(t *testing.T) {
 	db := openOutboxTestDB(t)
 	ctx := context.Background()

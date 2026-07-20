@@ -158,24 +158,27 @@ curl http://localhost:8081/health
 - `phase1-read-receipt.sh` 已把 `WebSocket ACK(read) -> gRPC Message Service -> Outbox Consumer -> sync_events` 固定为可重复 runbook，并校验 A 的 `message_read`、B 其他设备的 `conversation_updated`、`MAX(last_read_seq)` 收敛示例和 `/metrics` 指标名
 - Gateway 的旧连接替换和心跳续租已有固定自动化测试
 - Outbox 的指数退避、stale processing 接管、原子领取已有固定自动化测试
+- `TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss` 已固定证明：下游短暂失败时事件回到 `pending`，恢复后会被再次领取并成功落为 `done`，不会静默丢失，也不会误入 `failed`
+- `ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 已固定验证 `Spec 05 §6.1` 的重连退避窗口、30s 封顶和“连接存活超过 5 分钟优先快速重连”的判定
+- `TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 已固定验证 watchdog 超时关闭时会发出 `should_reconnect=true` 的错误帧；旧连接替换测试也会断言重连提示存在
 - 会话摘要的成员列表、未读累计、分页与空数组行为已有固定自动化测试
 - Sync API 的分页读取、latest_event_seq 返回与 cursor 单调前进已有固定自动化测试
 - HTTP、gRPC、outbox payload 与 WebSocket frame 已具备 `trace_id` 透传
 
-### 未通过部分
+### 当前结论
 
-- 父票 0001 仍未完全关闭，因为“Outbox 重试不丢消息”与“重连退避”这两条外层里程碑标准尚未形成固定 runbook 或自动化验收
-- `make test` 仍然缺少覆盖全部父票外层标准的自动化测试资产
+- 父票 `0001` 的 6 条硬性里程碑标准现在都已有固定 runbook 或自动化测试覆盖，可以关闭
+- `make test` 已包含 Outbox 重试恢复与重连退避这两条新增自动化测试资产
 
-因此，当前不能声明：
+因此，当前可以声明：
 
-- “Phase 1 已完整测试通过”
-- “消息发送 -> 持久化 -> WebSocket 实时投递 -> ACK -> 已读 收敛闭环已验收完成”
+- “Phase 1 父票的消息正确性骨架已验收通过”
+- “消息发送 -> 持久化 -> WebSocket 实时投递 -> ACK -> 已读 收敛闭环已具备固定验收证据”
 
-## 下一步最小补齐项
+## 后续增量
 
-若要把 Phase 1 从“部分交付已验证”推进到“整体验收通过”，最小增量应是：
+不再阻塞 Phase 1 父票、但仍值得继续补齐的自动化资产是：
 
-1. 补一条覆盖 “Outbox 重试不丢消息” 的固定 runbook 或自动化测试
-2. 补一条覆盖 “重连退避” 的固定 runbook 或自动化测试
-3. 为 `POST /v1/messages/send`、`GET /v1/sync/events`、`GET /v1/conversations/{cid}/messages` 继续补齐边界自动化测试
+1. 为 `POST /v1/messages/send`、`GET /v1/sync/events`、`GET /v1/conversations/{cid}/messages` 继续补齐 HTTP handler 级边界自动化测试
+2. 为 Gateway 的 invalid JWT、主动 `DISCONNECT`、watchdog 断链后的 Redis 清理补齐更细粒度测试
+3. 为 Outbox Consumer 的并发消费与优雅退出补齐固定自动化测试

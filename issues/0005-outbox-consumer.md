@@ -41,7 +41,7 @@ created_at: 2026-07-20
 ## Current implementation status
 
 - 已实现：Outbox Consumer 主循环、handler 注册、worker pool、优雅退出框架；事件领取已收敛为原子 `pending -> processing`；handler 失败后按票据语义回到 `pending`；lease 超时的 `processing` 会被接管回 `pending`。
-- 已新增验证：`internal/outbox/consumer_test.go` 已覆盖指数退避上限、原子领取为 `processing`、handler 失败后 `retry_count++` 且回到 `pending`、以及 stale processing 只重置超时事件。
+- 已新增验证：`internal/outbox/consumer_test.go` 已覆盖指数退避上限、原子领取为 `processing`、handler 失败后 `retry_count++` 且回到 `pending`、stale processing 只重置超时事件，以及 `TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss` 对“短暂失败后恢复成功、不丢消息、不进入 failed”的固定证明。
 - 未完成：`delivery_acked` 仍是占位消费路径，没有真实生产链路；多事件并发消费与优雅退出还缺固定测试，因此本票仍不能关闭。
 
 ## Blocked by

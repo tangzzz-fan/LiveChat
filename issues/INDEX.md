@@ -2,7 +2,7 @@
 
 | ID | Title | Status | Labels | Created |
 |----|-------|--------|--------|---------|
-| [0001](0001-phase-1-message-correctness-skeleton.md) | 阶段一：消息正确性骨架 — Message Service + Gateway 落地实现 | in_progress | `in-progress` | 2026-07-20 |
+| [0001](0001-phase-1-message-correctness-skeleton.md) | 阶段一：消息正确性骨架 — Message Service + Gateway 落地实现 | complete | `done` | 2026-07-20 |
 | [0002](0002-scaffold-migrations-auth.md) | 项目脚手架 + DB 迁移 + Mock Auth | in_progress | `in-progress` | 2026-07-20 |
 | [0003](0003-message-send-api.md) | 消息发送 API + 幂等写入 + Outbox 事件 | in_progress | `in-progress` | 2026-07-20 |
 | [0004](0004-gateway-websocket-handshake.md) | Gateway：WebSocket 握手 + 心跳 + 用户路由注册 | in_progress | `in-progress` | 2026-07-20 |

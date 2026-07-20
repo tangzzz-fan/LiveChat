@@ -1,8 +1,8 @@
 ---
 id: "0001"
 title: "阶段一：消息正确性骨架 — Message Service + Gateway 落地实现"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 created_at: 2026-07-20
 ---
 
@@ -26,9 +26,10 @@ created_at: 2026-07-20
 - 已新增验证：Gateway 已有 `MESSAGE_DELIVERY` 自动化测试，证明连接成功的 Device 可以接收实时投递帧。
 - 已新增验证：`ACK(read)` 已有转发与业务投影测试，证明 Gateway 能把 ACK 转发到 Message Service，且 `read_receipt` 会把已读状态投影为 `message_read` / `conversation_updated` sync events。
 - 已新增验证：`./scripts/phase1-realtime-delivery.sh` 已固定验证 `curl send -> Outbox -> Fanout -> gRPC Gateway -> WebSocket MESSAGE_DELIVERY`；`./scripts/phase1-read-receipt.sh` 已固定验证 `WebSocket ACK(read) -> gRPC Message Service -> Outbox Consumer -> sync_events`、B 的 `unread_count=0`、A 的 `message_read`、B 其他设备的 `conversation_updated` 和 `MAX(last_read_seq)` 收敛示例。
+- 已新增验证：`TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss` 已固定证明“下游短暂不可用 -> Outbox 重试 -> 恢复后成功处理 -> 不进入 failed 状态”，满足里程碑标准 5。
+- 已新增验证：`ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 已固定证明 `Spec 05 §6.1` 的标准退避窗口与 30s 封顶；`TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 与旧连接替换测试共同证明服务端会发出 `should_reconnect=true` 信号，满足里程碑标准 6。
 - 已实现：`Message Service`、`Gateway`、`Outbox Consumer`、`Sync Service` 的基础代码骨架已经存在，并可在本机 PostgreSQL/Redis 环境下运行。
-- 未完成：父票的“消息发送 -> 投递 -> 已读”主链路已经打通，但里程碑验证标准里仍剩两条外层能力未形成固定收口：`5. Outbox 重试不丢消息` 和 `6. 重连退避`。
-- 当前剩余阻塞点已从 `0006/0009` 收缩为父票自身的外层标准，而不再是主链路闭环缺失。
+- 结论：6 条里程碑验证标准均已形成固定 runbook 或自动化测试证据，父票可以关闭。
 
 ## Solution
 

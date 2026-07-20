@@ -199,6 +199,13 @@ func TestGatewayReplacesOldSessionWithoutDroppingNewRoute(t *testing.T) {
 	if oldFrame.Opcode != OpError {
 		t.Fatalf("unexpected old connection opcode: %d", oldFrame.Opcode)
 	}
+	oldErr := &livechat.ErrorFrame{}
+	if err := proto.Unmarshal(oldFrame.Payload, oldErr); err != nil {
+		t.Fatalf("proto.Unmarshal old connection error payload: %v", err)
+	}
+	if !oldErr.GetShouldReconnect() {
+		t.Fatalf("expected replacement error to hint reconnect")
+	}
 
 	if got := manager.GetSession(101, "ios-a"); got == nil {
 		t.Fatalf("new connection is not the active session")
@@ -318,6 +325,66 @@ func TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL(t *testing.T) {
 	}
 	if nodeTTL < 4*time.Minute {
 		t.Fatalf("node route ttl was not refreshed, got %s", nodeTTL)
+	}
+}
+
+func TestGatewayWatchdogClosesStaleSessionWithReconnectHint(t *testing.T) {
+	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	defer rdb.Close()
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	manager := NewManager(authSvc, rdb, "node-test", 30*time.Second, time.Second)
+
+	server := newGatewayTestServer(manager)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	mustHandshakeGatewayConn(t, conn, accessToken, "ios-a")
+
+	sess := manager.GetSession(101, "ios-a")
+	if sess == nil {
+		t.Fatalf("expected active session after handshake")
+	}
+	sess.LastReadAt = time.Now().Add(-2 * time.Second)
+
+	manager.checkStale()
+
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline stale notice: %v", err)
+	}
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage stale notice: %v", err)
+	}
+	frame, err := UnmarshalFrame(raw)
+	if err != nil {
+		t.Fatalf("UnmarshalFrame stale notice: %v", err)
+	}
+	if frame.Opcode != OpError {
+		t.Fatalf("unexpected stale notice opcode: %d", frame.Opcode)
+	}
+	errPayload := &livechat.ErrorFrame{}
+	if err := proto.Unmarshal(frame.Payload, errPayload); err != nil {
+		t.Fatalf("proto.Unmarshal stale notice: %v", err)
+	}
+	if !errPayload.GetShouldReconnect() {
+		t.Fatalf("expected stale timeout to require reconnect")
+	}
+	if errPayload.GetMessage() != "connection timeout" {
+		t.Fatalf("unexpected timeout message: %s", errPayload.GetMessage())
 	}
 }
 
