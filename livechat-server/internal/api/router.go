@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
@@ -158,12 +159,16 @@ func handleRegister(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		// Check if user already exists
 		var userID int64
 		err := db.QueryRowContext(r.Context(),
-			"INSERT INTO users (phone_e164, display_name) VALUES ($1, $2) ON CONFLICT (phone_e164) DO UPDATE SET phone_e164=EXCLUDED.phone_e164 RETURNING id",
+			"INSERT INTO users (phone_e164, display_name) VALUES ($1, $2) RETURNING id",
 			req.PhoneE164, req.PhoneE164).Scan(&userID)
 		if err != nil {
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+				writeJSON(w, http.StatusConflict, errorResponse("user already exists"))
+				return
+			}
 			slog.Error("upsert user", "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to create user"))
 			return

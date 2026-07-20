@@ -43,8 +43,9 @@ created_at: 2026-07-20
 
 - 已实现：Gateway 进程、`/ws` 升级入口、JWT 握手鉴权、Session 管理、HEARTBEAT / HEARTBEAT_ACK、Redis 路由注册与清理、`/health`，以及 ACK 通过 gRPC 上送 Message Service。
 - 已新增验证：`TestGatewayReplacesOldSessionWithoutDroppingNewRoute` 现在不仅覆盖“同 user_id + device_id 新连接替换旧连接时，旧连接被踢出且 Redis 路由仍指向新连接”，还会断言旧连接收到 `should_reconnect=true` 的错误帧；`TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL` 覆盖 HEARTBEAT 对用户路由和节点集合 TTL 的续租。
-- 已新增验证：`TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 固定覆盖 watchdog timeout -> `ERROR(should_reconnect=true)` 的断链提示；`ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 固定覆盖 Spec 05 §6.1 的标准退避窗口。
-- 未完成：invalid JWT、客户端主动 DISCONNECT、以及 watchdog 断链后 Redis 路由清理的固定测试仍未补齐；`DISCONNECT(code=timeout)` 语义也尚未收敛成票据中的明确帧形态，因此本票仍处于进行中。
+- 已新增验证：`TestGatewayWatchdogClosesStaleSessionWithReconnectHint` 固定覆盖 watchdog timeout -> `ERROR(should_reconnect=true)` 的断链提示，并断言 Redis 路由最终被清理；`TestGatewayRejectsInvalidJWTHandshake` 固定覆盖 invalid JWT -> `ERROR(should_reconnect=false)`；`TestGatewayDisconnectRemovesSessionAndRoute` 固定覆盖客户端主动 `DISCONNECT` 后 session 与 Redis 路由清理。
+- 已新增验证：`ReconnectBackoffWindowGrowthAndCap`、`ReconnectBackoffDelayStaysInsideWindow`、`FastReconnectEligible` 固定覆盖 Spec 05 §6.1 的标准退避窗口。
+- 未完成：`DISCONNECT(code=timeout)` 语义仍未收敛成票据中的明确帧形态；`buf lint` 也尚未在当前环境形成固定验证记录，因此本票仍处于进行中。
 
 ## Blocked by
 

@@ -249,6 +249,63 @@ func TestGatewayReplacesOldSessionWithoutDroppingNewRoute(t *testing.T) {
 	}
 }
 
+func TestGatewayRejectsInvalidJWTHandshake(t *testing.T) {
+	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	defer rdb.Close()
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	manager := NewManager(authSvc, rdb, "node-test", 30*time.Second, 90*time.Second)
+	server := newGatewayTestServer(manager)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	frame, err := NewFrame(OpHandshakeReq, &livechat.HandshakeRequest{
+		AccessToken: "invalid-token",
+		DeviceId:    "ios-a",
+		Platform:    "ios",
+	})
+	if err != nil {
+		t.Fatalf("NewFrame invalid handshake: %v", err)
+	}
+	raw, err := MarshalFrame(frame)
+	if err != nil {
+		t.Fatalf("MarshalFrame invalid handshake: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
+		t.Fatalf("WriteMessage invalid handshake: %v", err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline invalid handshake: %v", err)
+	}
+	_, raw, err = conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage invalid handshake: %v", err)
+	}
+	respFrame, err := UnmarshalFrame(raw)
+	if err != nil {
+		t.Fatalf("UnmarshalFrame invalid handshake: %v", err)
+	}
+	if respFrame.Opcode != OpError {
+		t.Fatalf("expected error opcode for invalid jwt, got %d", respFrame.Opcode)
+	}
+	errPayload := &livechat.ErrorFrame{}
+	if err := proto.Unmarshal(respFrame.Payload, errPayload); err != nil {
+		t.Fatalf("proto.Unmarshal invalid jwt error: %v", err)
+	}
+	if errPayload.GetShouldReconnect() {
+		t.Fatalf("expected invalid jwt to disable reconnect hint")
+	}
+}
+
 func TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	defer rdb.Close()
@@ -328,6 +385,53 @@ func TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL(t *testing.T) {
 	}
 }
 
+func TestGatewayDisconnectRemovesSessionAndRoute(t *testing.T) {
+	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	defer rdb.Close()
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	manager := NewManager(authSvc, rdb, "node-test", 30*time.Second, 90*time.Second)
+
+	server := newGatewayTestServer(manager)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	mustHandshakeGatewayConn(t, conn, accessToken, "ios-a")
+
+	disconnectFrame, err := NewFrame(OpDisconnect, &livechat.Heartbeat{})
+	if err != nil {
+		t.Fatalf("NewFrame disconnect: %v", err)
+	}
+	raw, err := MarshalFrame(disconnectFrame)
+	if err != nil {
+		t.Fatalf("MarshalFrame disconnect: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
+		t.Fatalf("WriteMessage disconnect: %v", err)
+	}
+
+	waitForGatewayCleanup(t, func() bool {
+		if manager.ActiveSessions() != 0 {
+			return false
+		}
+		_, err := rdb.Get(context.Background(), redisUserKey(101, "ios-a")).Result()
+		return err == redis.Nil
+	})
+}
+
 func TestGatewayWatchdogClosesStaleSessionWithReconnectHint(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	defer rdb.Close()
@@ -386,6 +490,13 @@ func TestGatewayWatchdogClosesStaleSessionWithReconnectHint(t *testing.T) {
 	if errPayload.GetMessage() != "connection timeout" {
 		t.Fatalf("unexpected timeout message: %s", errPayload.GetMessage())
 	}
+	waitForGatewayCleanup(t, func() bool {
+		if manager.ActiveSessions() != 0 {
+			return false
+		}
+		_, err := rdb.Get(context.Background(), redisUserKey(101, "ios-a")).Result()
+		return err == redis.Nil
+	})
 }
 
 type staticSyncSequenceProvider int64
@@ -445,4 +556,16 @@ func mustHandshakeGatewayConn(t *testing.T, conn *websocket.Conn, accessToken, d
 		t.Fatalf("unexpected session id format: %s", resp.GetSessionId())
 	}
 	return resp
+}
+
+func waitForGatewayCleanup(t *testing.T, ready func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ready() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("gateway cleanup did not converge before deadline")
 }

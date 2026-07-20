@@ -43,8 +43,8 @@ created_at: 2026-07-20
 ## Current implementation status
 
 - 已实现：`livechat-server` 模块结构、三个服务入口、迁移工具、`POST /v1/auth/register`、`POST /v1/auth/login`、JWT 与 refresh token 基础逻辑、`GET /health`。
-- 已验证：`go build ./cmd/message-service`、`go build ./cmd/gateway`、`go build ./cmd/outbox-consumer` 可通过；注册后可获得 JWT 并访问受保护端点；健康检查可返回 PostgreSQL/Redis 状态。
-- 未完成：本票的验收标准仍未全部关闭，尤其是 `make dev` 依赖 Docker，而当前验证环境没有 `docker` 命令；重复注册返回 `409` 这一条也尚未作为本地验证结论记录。
+- 已验证：`go build ./cmd/message-service`、`go build ./cmd/gateway`、`go build ./cmd/outbox-consumer` 可通过；注册后可获得 JWT 并访问受保护端点；健康检查可返回 PostgreSQL/Redis 状态；`internal/api/router_integration_test.go` 已固定验证重复注册返回 `409 conflict`。
+- 未完成：本票的验收标准仍未全部关闭，主要剩 `make dev` 的 Docker 路径在当前环境无法实测，以及 `POST /v1/auth/login` / `GET /health` 仍缺更完整的固定自动化回归记录。
 
 ## Blocked by
 

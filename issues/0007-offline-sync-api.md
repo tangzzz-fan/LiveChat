@@ -41,8 +41,8 @@ created_at: 2026-07-20
 
 - 已实现：`sync_events` 写入、`GET /v1/sync/events`、`sync_cursors` 更新、基于 `cursor` 的增量查询、离线补拉基础路径，以及 Gateway 握手响应中的 `latest_event_seq` 联动。
 - 已验证：`./scripts/phase1-smoke.sh` 已确认接收方可以通过同步 API 看到 `message_created` 事件。
-- 已新增验证：Gateway 握手测试现在会断言 `HandshakeResponse.latest_event_seq` 来自同步事件提供者；`internal/sync/service_test.go` 已覆盖分页读取、`latest_event_seq` 返回、`cursor` 只前进不回退。
-- 未完成：序号缺口恢复仍未形成专门实现与固定验收；`GET /v1/sync/events` 的 HTTP handler 级分页/游标回写验证也还未补齐，因此本票仍处于进行中。
+- 已新增验证：Gateway 握手测试现在会断言 `HandshakeResponse.latest_event_seq` 来自同步事件提供者；`internal/sync/service_test.go` 已覆盖分页读取、`latest_event_seq` 返回、`cursor` 只前进不回退；`internal/api/router_integration_test.go` 已固定覆盖 `GET /v1/sync/events` 在 `cursor=0` 时返回事件 + `latest_event_seq`、分页 `has_more`、以及 handler 对 `sync_cursors` 的回写和单调前进。
+- 未完成：序号缺口恢复仍未形成专门实现与固定验收，因此本票仍处于进行中。
 
 ## Blocked by
 

@@ -1,8 +1,8 @@
 ---
 id: "0008"
 title: "会话摘要投影 + 会话列表 API"
-status: in_progress
-labels: ["in-progress"]
+status: complete
+labels: ["done"]
 parent: "0001"
 blocked_by: ["0005"]
 created_at: 2026-07-20
@@ -39,8 +39,8 @@ created_at: 2026-07-20
 ## Current implementation status
 
 - 已实现：`conversation_summaries` 投影维护、`GET /v1/conversations`、未读数更新、排序与分页基础逻辑；响应现在包含从 `conversation_members` 联查得到的成员列表。
-- 已新增验证：`internal/conversations/summary_test.go` 已覆盖连续 3 条消息后的未读累计、成员列表返回、按 `last_message_at DESC` 排序、分页和空数组场景。
-- 未完成：401 场景目前仍主要依赖路由层通用鉴权逻辑，尚未有专门的会话列表 HTTP 测试，因此本票仍处于进行中。
+- 已新增验证：`internal/conversations/summary_test.go` 已覆盖连续 3 条消息后的未读累计、成员列表返回、按 `last_message_at DESC` 排序、分页和空数组场景；`internal/api/router_integration_test.go` 已固定覆盖 `GET /v1/conversations` 无 JWT 返回 `401`。
+- 结论：本票的投影行为、列表返回行为与鉴权边界均已有固定自动化回归记录，可以关闭。
 
 ## Blocked by
 
