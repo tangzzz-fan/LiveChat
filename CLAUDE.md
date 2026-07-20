@@ -1,136 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件定义在本仓库内协作时应遵循的仓库级规则。
 
-## Project Overview
+## 项目概览
 
-LiveChat is a **learning-driven** WhatsApp-class IM system — iOS client (SwiftUI) + Go backend. The goal is not to ship a product but to **learn classic large-scale IM problems through hands-on implementation**: C100K connections, reliable messaging, offline sync, group fan-out, presence broadcast storms, E2EE.
+LiveChat 是一个以学习为导向的 WhatsApp 类即时通信系统设计项目。当前阶段以规格文档为主，先完成领域建模、链路拆解和工程边界约束，再逐步落地服务端、客户端、协议与基础设施实现。
 
-## Repo Structure
+当前仓库的设计源位于 `Specs/`，不是旧的 `specs/SPEC-xxx` 目录结构。
 
-```
+## 当前仓库结构
+
+```text
 LiveChat/
-├── specs/                     # 15 architecture specs (SPEC-000 ~ SPEC-014)
-├── proto/                     # .proto definitions (SPEC-001, shared Go/Swift)
-├── server/                    # Go backend monorepo
-│   ├── gateway/               #   WebSocket gateway (SPEC-002)
-│   ├── msgsvc/                #   Message service (SPEC-003)
-│   ├── api/                   #   REST API service
-│   ├── pushworker/            #   APNs push worker (SPEC-008)
-│   └── aisvc/                 #   AI streaming service (M4, SPEC-013)
-├── ios/                       # SwiftUI App (SPEC-004)
-├── loadtest/                  # Go loadtest tool (SPEC-005)
-├── deploy/                    # docker-compose, Prometheus, Grafana
-└── docs/
-    ├── adr/                   # Architecture Decision Records
-    ├── experiments/           # Runbook results for verification experiments
-    └── statecharts/           # FSM state diagrams (SPEC-012)
+├── Specs/                # 核心规格文档
+├── .agents/skills/       # 本地 skills 仓库
+├── CONTEXT.md            # 领域术语表
+├── docs/
+│   ├── adr/              # 架构决策记录
+│   └── agents/           # skills 仓库级配置
+├── README.md
+└── CLAUDE.md
 ```
 
-## Milestone Philosophy
+## 当前阶段约束
 
-The project ships in 4 milestones. **M1 must hit a verifiable closed loop** before building further:
+- 以 `Specs/` 为唯一设计源。
+- 任何设计变更先改 spec，再改配置、脚本和代码。
+- 文档编号和主题必须与 `Specs/` 保持一致。
+- 旧的 `specs/SPEC-xxx` 路径视为历史路径，不应继续引用。
 
-- **M1**: 1:1 chat, 50k connections, 1,000 msg/s, kill-9 zero-loss proof, iOS flight-mode experiment
-- **M2**: Group chat, presence/typing/read receipts, APNs push
-- **M3**: Media (MinIO), multi-device sync, E2EE (Signal Protocol)
-- **M4**: Streaming rendering + FSM (012), AI bot + streaming pipeline (013), on-device AI (014)
+## 规格推进顺序
 
-Spec dependency graph (hard deps only):
-```
-001 → 002 → 003 → 004 → 005
-              ├→ 006      009 ─┐
-              ├→ 007          ├→ 011
-              ├→ 008     010 ─┘
+优先实现消息正确性骨架，再扩展用户可感知能力，最后补足规模化与工程化能力。
 
-M4: 004 → 012 → 013, 014 (013/014 parallel after 012)
-```
+推荐主链路阅读顺序：
 
-## Core Architectural Principles
+1. `Specs/00-规格总览与实施规划.md`
+2. `Specs/02-领域模型与消息生命周期.md`
+3. `Specs/04-消息发送主链路与Outbox模式.md`
+4. `Specs/05-长连接网关与协议设计.md`
+5. `Specs/06-离线同步与多端一致性.md`
 
-These are the three foundations every spec builds on:
+## 核心架构原则
 
-1. **Gateway is stateless** — connection state lives in Redis route table. Kill any gateway, client reconnects to another, no data loss.
-2. **Connection ≠ business logic** — Gateway handles pipes (websocket, heartbeat, codec); Message Service handles semantics (ordering, dedup, persistence, fan-out).
-3. **Client is local-first** — UI reads from local GRDB only. Network syncs the local DB toward server state. Messages render instantly; network unreliability is absorbed by the outbox + inbox model.
+1. 先建立消息生命周期，再讨论接口和存储细节。
+2. 接入层处理连接与协议，业务层处理语义与一致性。
+3. 本地状态和服务端状态必须有单一可信源，不能让 UI、网关、消息服务各自发明状态定义。
+4. 离线补拉、多端同步、投递 ACK、已读推进必须清晰分层，不能混用一个序号承担多种语义。
+5. 监控和压测不是收尾工作，而是规格的一部分。
 
-## Spec Conventions
+## 文档与目录约定
 
-- Every spec follows "Why → Challenges → Solutions → Scope → Acceptance Criteria → Test Plan"
-- Acceptance criteria are **quantifiable and experimentable** (not "code is done")
-- `docs/experiments/` records manual runbook results for each acceptance criterion
-- Cross-spec consistency rules: when two specs define the same mechanism (e.g., inbox retention policy), one is the **canonical source** and the other **references it** to prevent drift
+- 规格文档放在 `Specs/`
+- 领域术语放在 `CONTEXT.md`
+- 架构决策放在 `docs/adr/`
+- Matt Pocock skills 的仓库级配置放在 `docs/agents/`
 
-## Key Design Decisions (from specs)
+## Agent skills
 
-- **Dual-sequence model**: `conv_seq` (per-conversation ordering) ≠ `inbox_seq` (per-user sync cursor). Confusing these is the #1 self-built IM design bug.
-- **Push-pull hybrid**: Push is fast (best-effort), pull is complete (inbox sync). Push can drop — inbox is the source of truth.
-- **Write-fanout for small groups, read-fanout documented for large**: WhatsApp/Discord hybrid strategy, threshold documented in SPEC-006.
-- **Data classification spectrum**: From "never lose" (messages, via inbox) to "should lose" (typing indicators, via pure memory forward). SPEC-007 defines this; SPEC-013 reuses it for StreamChunk.
-- **E2EE is last**: Encryption freezes your architecture — all content-dependent features (search, moderation, server dedup) die. Build everything in plaintext first, then lock it.
-- **Bot sessions are explicitly unencrypted**: Server-side AI needs plaintext. On-device AI (014) is the only intelligence path for encrypted conversations.
+### Issue tracker
 
-## Development Commands
+Issues 使用 GitHub Issues，外部 PR 不作为 triage request surface。见 `docs/agents/issue-tracker.md`。
 
-### Go (server/)
+### Triage labels
 
-```bash
-# Build all services
-cd server && go build ./...
+使用默认标签映射：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。见 `docs/agents/triage-labels.md`。
 
-# Run tests
-go test ./...                          # all tests
-go test -run TestSnowflake ./msgsvc/  # single test
+### Domain docs
 
-# Proto generation
-cd proto && buf generate               # generate Go + Swift code
-buf lint && buf breaking               # CI checks
-```
+当前仓库按 single-context 处理，领域术语位于根目录 `CONTEXT.md`，架构决策位于 `docs/adr/`。见 `docs/agents/domain.md`。
 
-### iOS
+## 协作要求
 
-```bash
-cd ios
-xcodebuild -project LiveChat.xcodeproj -scheme LiveChat test   # run tests
-```
-
-### Loadtest
-
-```bash
-cd loadtest
-make loadtest-smoke                                               # 1k connections, CI mode
-go run ./cmd/loadtest --scenario scenarios/idle_50k.yaml --mode perf
-go run ./cmd/loadtest --scenario scenarios/chat_1kmsg.yaml --mode correctness
-```
-
-### Docker Compose (full stack)
-
-```bash
-cd deploy
-docker-compose up -d                    # 2×gateway + msgsvc + api + PG + Redis + prometheus + grafana
-docker-compose logs -f gateway         # tail specific service
-docker-compose down -v                 # tear down with volume cleanup
-```
-
-## Experiment Runbooks
-
-Verification experiments from specs are manual runbooks. Results go to `docs/experiments/`. Key experiments:
-
-- `idle_50k` — 50k connections stable for 30min
-- `kill-9` — random gateway/msgsvc kills with zero-loss proof
-- `flight-mode` — iOS offline message queue → online sync
-- `reconnect-storm` — 5w simultaneous reconnect, prove rate limiter works
-- `server-blind-test` — dump all DB/Redis/memory, grep for plaintext → zero hits
-
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| iOS | SwiftUI, GRDB (SQLite), Swift Concurrency (`async/await`, actors), iOS 17+ |
-| Backend | Go, goroutine-per-connection, gRPC, Protobuf (buf) |
-| Storage | PostgreSQL (partitioned), Redis |
-| Object Store | MinIO (S3-compatible, M3) |
-| E2EE | libsignal (Signal Protocol, M3) |
-| On-device AI | Apple Foundation Models (iOS 26+, M4), Core ML fallback |
-| Observability | Prometheus + Grafana |
-| Infra | docker-compose |
+- 变更任何配置、脚本、说明文档前，先检查是否仍引用旧路径或旧命名。
+- 创建新实现目录时，名称与职责必须能映射回对应 spec。
+- 生成代码、测试、脚本或文档时，优先复用 `CONTEXT.md` 中的术语，避免同义词漂移。
+- 评审或重构前，先读对应 spec，再读 `CONTEXT.md` 与相关 ADR。
+- 新实现的能力/模块如果涉及通用工程问题，应同步更新 `docs/engineering-problems/` 并更新 INDEX.md。问题库使用统一模板：问题是什么 → 通用分析思路 → 当前方案 → 替代方案及取舍 → 踩坑记录。
