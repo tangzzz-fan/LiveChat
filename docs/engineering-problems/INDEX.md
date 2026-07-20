@@ -52,3 +52,4 @@
 | 05 | [离线消息缺口：断连期间的消息如何高效补回](05-offline-gap-detection.md) | `offline`, `consistency` | 两层同步（全局事件流 + 会话补拉）+ cursor 管理 |
 | 06 | [服务端"消息已接收"不等于客户端"消息已送达"](06-message-lifecycle-stages.md) | `durability`, `consistency` | 三阶段生命周期：Accepted → Delivered → Read |
 | 07 | [来自 DDIA 的可移植概念](07-ddia-concepts.md) | *（跨领域理论）* | 可靠性、事务隔离、分区、流处理、线性一致、端到端原则等 11 个概念在 LiveChat 项目中的映射 |
+| 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念：gRPC 投递、背压、分片、热点群聊、连接迁移、写扩散 vs 读扩散、Copy-on-Write、结构化日志、Clock Skew、幂等窗口 |
