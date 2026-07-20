@@ -12,6 +12,13 @@
 
 **当前状态**：P0 已实现 `logDeliverer` (日志占位)。完整 gRPC 投递是第一个要补齐的问题。
 
+### 已有实现参考 (2026-07-20)
+
+- Outbox Consumer 事件消费循环: `livechat-server/internal/outbox/consumer.go` — `Run()` worker pool
+- Fanout 服务投递编排: `livechat-server/internal/fanout/service.go` — `Fanout()` 查成员 → 在线设备 → 投递或 sync
+- Sync 事件 AppendEvent: `livechat-server/internal/sync/service.go` — `AppendEvent()`
+- LogDeliverer 占位实现: `livechat-server/cmd/outbox-consumer/main.go` — 日志打印投递信息
+
 ## 2. 背压 (Backpressure)
 
 **何时会遇到**：Outbox 积压超过 10,000 条。
@@ -22,6 +29,13 @@
 - 消费者延迟监控（当前用 metrics lag_seconds）
 
 **DDIA 相关**：Ch11 Stream Processing — 消费者处理速度落后于生产者的处理策略。
+
+### 已有实现参考 (2026-07-20)
+
+- Outbox Consumer 配置: `livechat-server/internal/outbox/consumer.go` — `Config` 结构体 (BatchSize, MaxRetries 等)
+- Worker pool 与事件通道: `livechat-server/internal/outbox/consumer.go` — `Run()` 中的 channel + goroutine
+- Consumer metrics: `livechat-server/internal/outbox/consumer.go` — `Metrics()` 含 pending_count 和 lag_seconds
+- 退避重试算法: `livechat-server/internal/outbox/consumer.go` — `backoffDuration()`
 
 ## 3. 存储分层与分片 (Sharding)
 
@@ -34,6 +48,12 @@
 
 **DDIA 相关**：Ch6 Partitioning — 分区键选择, 二级索引问题, Rebalancing。
 
+### 已有实现参考 (2026-07-20)
+
+- sync_events DDL 已按 user_id 分片: `livechat-server/migrations/006_sync_events.up.sql` — `PRIMARY KEY (user_id, event_seq)`
+- messages 按 conversation_id 自然分片: `livechat-server/migrations/004_messages.up.sql` — `INDEX ... (conversation_id, conversation_seq)`
+- conversation_summaries 按 user_id 分片: `livechat-server/migrations/008_conversation_summaries.up.sql` — `PRIMARY KEY (user_id, conversation_id)`
+
 ## 4. 热点群聊 (Hotspot Group Chat)
 
 **何时会遇到**：单个群聊的并发写入达到每秒数千条。
@@ -44,6 +64,12 @@
 - 如何限制热点群的扇出延迟（超时、降级、部分投递）
 
 **DDIA 相关**：Ch6 — Hotspot 处理, Ch9 — 顺序保证的代价。
+
+### 已有实现参考 (2026-07-20)
+
+- 单会话 SEQ 写入: `livechat-server/internal/messages/service.go` — `ensureSeq()` + `nextval()`
+- Fanout 群成员遍历: `livechat-server/internal/fanout/service.go` — `Fanout()` 查 conversation_members → 逐个处理
+- 群事件类型预留: `livechat-server/proto/ws_frame.proto` — opcode 0x3000-0x3FFF (群组事件)
 
 ## 5. 连接迁移 (WiFi ↔ 蜂窝)
 
@@ -56,6 +82,12 @@
 
 **DDIA 相关**：Ch8 — 不可靠网络下的部分失败。Spec 05 §9 已设计协议，P1 实现。
 
+### 已有实现参考 (2026-07-20)
+
+- 连接重连退避算法: `livechat-server/internal/gateway/manager.go` — `checkStale()` + 90s 超时
+- Redis 路由 TTL 自动过期: `livechat-server/internal/gateway/manager.go` — `registerRoute()` 5min TTL
+- 会话迁移冲突处理: `livechat-server/internal/gateway/manager.go` — 旧 session 被新连接踢出 (ErrorFrame should_reconnect=true)
+
 ## 6. 写扩散 vs 读扩散 (Fan-out strategy)
 
 **何时会遇到**：群聊规模超过 50 人，或活跃群数量超过数千。
@@ -67,6 +99,12 @@
 - 混合策略：哪些成员是"活跃"的（需要写扩散），哪些是"潜水"的（读扩散就好）
 
 **DDIA 相关**：Ch6 — Partitioning 策略, Ch9 — 冗余 vs 延迟的权衡。
+
+### 已有实现参考 (2026-07-20)
+
+- 当前 P0 Fanout 实现了写扩散: `livechat-server/internal/fanout/service.go` — `Fanout()` 遍历所有成员
+- Fanout 已区分 在线投递 vs 离线 sync: 在线 → `deliverer.DeliverMessage()`，离线 → `sync.AppendEvent()`
+- sync_events 表支持批量写入: `livechat-server/internal/sync/service.go` — `AppendEvent()` 逐条写入，P1 可优化为批量
 
 ## 7. Copy-on-Write 在消息系统中的应用
 
@@ -87,6 +125,14 @@
 
 **DDIA 相关**：Ch12 — 审计与数据流追踪。
 
+### 已有实现参考 (2026-07-20)
+
+- trace_id 已注入 WsFrame: `livechat-server/proto/ws_frame.proto` — `WsFrame.trace_id`
+- slog JSON 日志: `livechat-server/cmd/message-service/main.go` — `slog.NewJSONHandler`
+- `/metrics` 端点 (expvar): `livechat-server/internal/metrics/metrics.go` — `Handler()`
+- HTTP 请求日志含 method、path、duration_ms: `livechat-server/internal/api/router.go` — `withLogging()`
+- trace_id 由客户端传入或服务端生成: `WsFrame` proto字段已定义，网关层尚未自动注入
+
 ## 9. Clock Skew 对消息排序的影响
 
 **何时会遇到**：使用 `server_received_at` 而非 `conversation_seq` 排序。
@@ -98,6 +144,12 @@
 
 **DDIA 相关**：Ch8 — 不可靠的时钟。Ch9 — 全局快照隔离。
 
+### 已有实现参考 (2026-07-20)
+
+- 消息排序强制用 conversation_seq: `livechat-server/internal/messages/service.go` — `Send()` 分配 seq → 不按时间戳排序
+- 客户端渲染规则: `livechat-server/internal/sync/service.go` — `GetMessages()` `ORDER BY conversation_seq ASC`
+- HandshakeResponse 含 server_time_ms: `livechat-server/internal/gateway/manager.go` — 握手时下发服务端时间戳
+
 ## 10. Idempotency Keys 与 Idempotency Windows
 
 **何时会遇到**：大量用户同时超时重试 → 同一个 client_message_id 的服务端压力。
@@ -108,3 +160,10 @@
 - 幂等窗口 vs 存储开销的权衡
 
 **DDIA 相关**：Ch7 — 事务隔离级别, Ch9 — 全局唯一性保证。
+
+### 已有实现参考 (2026-07-20)
+
+- DB unique constraint 幂等: `livechat-server/internal/messages/service.go` — `ON CONFLICT (sender_user_id, client_message_id) DO NOTHING`
+- xmax=0 判断是否新插入: `livechat-server/internal/messages/service.go` — `RETURNING (xmax = 0) AS is_new`
+- 幂等命中返回已有记录: `livechat-server/internal/messages/service.go` — 查询已有消息返回 `is_duplicate: true`
+- 服务端主动去重: 尚未实现（当前依赖 DB unique constraint 作为被动保护，P1 可增加内存窗口去重）
