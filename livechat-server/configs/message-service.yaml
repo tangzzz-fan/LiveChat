@@ -1,0 +1,41 @@
+server:
+  port: 8080
+  read_timeout: 10s
+  write_timeout: 10s
+
+database:
+  host: localhost
+  port: 5432
+  user: livechat
+  password: livechat
+  name: livechat
+  ssl_mode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 5m
+
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+
+auth:
+  jwt_secret: "livechat-dev-secret-change-in-production"
+  access_token_ttl: 1h
+  refresh_token_ttl: 720h  # 30 days
+
+outbox:
+  poll_interval_ms: 100
+  idle_poll_interval_ms: 500
+  batch_size: 100
+  max_retries: 10
+  worker_count: 4
+  lease_timeout: 60s
+
+gateway:
+  node_id: "node-1"
+  heartbeat_interval: 30s
+  read_timeout: 90s
+  write_timeout: 30s
+  max_connections: 10000
