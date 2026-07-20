@@ -51,6 +51,7 @@ livechat-server/
 
 - [docs/build-and-test.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/build-and-test.md)
 - [docs/阶段性实现介绍.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/阶段性实现介绍.md)
+- [docs/Phase1-架构设计说明.md](file:///Users/apple/Developments/LiveChat/livechat-server/docs/Phase1-架构设计说明.md)
 
 该文档包含：
 
@@ -60,6 +61,7 @@ livechat-server/
 - `./scripts/phase1-smoke.sh` 验证回路
 - Phase 1 当前交付结论
 - 当前阶段的实现方案、已实现能力与关键技术决策
+- Phase 1 当前架构的进程边界、数据边界和主链路说明
 
 ## API 文档
 
