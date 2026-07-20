@@ -12,8 +12,10 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 )
 
@@ -23,6 +25,8 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 
 	msgSvc := messages.NewService(db)
 	syncSvc := sync.NewService(db)
+	convSvc := conversations.NewService(db)
+	msgSvc.SetConversationUpdater(convSvc)
 
 	// Auth endpoints (public)
 	mux.HandleFunc("POST /v1/auth/register", handleRegister(db, authSvc))
@@ -31,11 +35,15 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	// Health
 	mux.HandleFunc("GET /health", handleHealth(db, rdb))
 
+	// Metrics
+	mux.Handle("GET /metrics", metrics.Handler())
+
 	// Authenticated endpoints
 	authMw := newAuthMiddleware(authSvc)
 	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
 	mux.Handle("GET /v1/sync/events", authMw.Wrap(http.HandlerFunc(handleGetSyncEvents(syncSvc))))
 	mux.Handle("GET /v1/conversations/{cid}/messages", authMw.Wrap(http.HandlerFunc(handleGetMessages(syncSvc))))
+	mux.Handle("GET /v1/conversations", authMw.Wrap(http.HandlerFunc(handleListConversations(convSvc))))
 
 	return withLogging(mux)
 }
@@ -300,6 +308,7 @@ func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 func handleGetSyncEvents(svc *sync.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := UserIDFromContext(r.Context())
+		deviceID := DeviceIDFromContext(r.Context())
 
 		cursorStr := r.URL.Query().Get("cursor")
 		limitStr := r.URL.Query().Get("limit")
@@ -324,6 +333,15 @@ func handleGetSyncEvents(svc *sync.Service) http.HandlerFunc {
 			slog.Error("get sync events", "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
 			return
+		}
+
+		// Update cursor after sync
+		if len(events) > 0 {
+			lastEventSeq := events[len(events)-1].EventSeq
+			if err := svc.UpdateCursor(r.Context(), userID, deviceID, lastEventSeq); err != nil {
+				slog.Error("update cursor", "error", err)
+				// non-fatal
+			}
 		}
 
 		hasMore := len(events) >= limit
@@ -390,6 +408,41 @@ func handleGetMessages(svc *sync.Service) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"messages": messages,
+		})
+	}
+}
+
+// ── Conversation list handler ───────────────────────
+
+func handleListConversations(svc *conversations.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+
+		limitStr := r.URL.Query().Get("limit")
+		offsetStr := r.URL.Query().Get("offset")
+
+		limit := 50
+		offset := 0
+		if limitStr != "" {
+			if n, err := strconv.Atoi(limitStr); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+		if offsetStr != "" {
+			if n, err := strconv.Atoi(offsetStr); err == nil && n >= 0 {
+				offset = n
+			}
+		}
+
+		summaries, err := svc.List(r.Context(), userID, limit, offset)
+		if err != nil {
+			slog.Error("list conversations", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"conversations": summaries,
 		})
 	}
 }

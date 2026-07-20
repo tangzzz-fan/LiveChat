@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"fmt"
 	"time"
 
@@ -12,11 +13,22 @@ import (
 
 // Service handles the message send write path.
 type Service struct {
-	db *sql.DB
+	db       *sql.DB
+	convUpdater ConversationUpdater
+}
+
+// ConversationUpdater is called after message insert to maintain conversation_summaries.
+type ConversationUpdater interface {
+	UpdateOnNewMessage(ctx context.Context, conversationID string, senderUserID int64, preview string) error
 }
 
 func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
+}
+
+// SetConversationUpdater wires the conversation summary updater (can be called after init).
+func (s *Service) SetConversationUpdater(u ConversationUpdater) {
+	s.convUpdater = u
 }
 
 // SendRequest carries the data needed to send a message.
@@ -152,6 +164,22 @@ func (s *Service) Send(ctx context.Context, req SendRequest) (*SendResult, error
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	// Update conversation summary (outside tx — eventual consistency)
+	if s.convUpdater != nil {
+		preview := ""
+		if req.MessageType == "text" {
+			var content map[string]interface{}
+			if json.Unmarshal([]byte(req.Content), &content) == nil {
+				if t, ok := content["text"].(string); ok {
+					preview = t
+				}
+			}
+		}
+		if err := s.convUpdater.UpdateOnNewMessage(context.Background(), req.ConversationID, req.SenderUserID, preview); err != nil {
+			slog.Error("update conversation summary", "error", err)
+		}
 	}
 
 	return &SendResult{
