@@ -1,8 +1,8 @@
 ---
 id: "0010"
 title: "阶段二：用户可感知能力 — 认证、群聊、媒体与推送"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 created_at: 2026-07-20
 updated_at: 2026-07-21
 ---

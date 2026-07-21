@@ -11,7 +11,7 @@
 | [0007](0007-offline-sync-api.md) | 离线同步：增量事件 API + 游标管理 + 序号缺口检测 | complete | `done` | 2026-07-20 |
 | [0008](0008-conversation-summaries.md) | 会话摘要投影 + 会话列表 API | complete | `done` | 2026-07-20 |
 | [0009](0009-read-receipts-observability.md) | 已读回执 + 多端一致性收敛 + 可观测性 | complete | `done` | 2026-07-20 |
-| [0010](0010-phase-2-user-visible-capabilities.md) | 阶段二：用户可感知能力 — 认证、群聊、媒体与推送 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
+| [0010](0010-phase-2-user-visible-capabilities.md) | 阶段二：用户可感知能力 — 认证、群聊、媒体与推送 | complete | `done` | 2026-07-20 |
 | [0011](0011-auth-device-sessions-push-token.md) | 认证收敛 + 设备会话管理 + Push Token 注册 | complete | `done` | 2026-07-20 |
 | [0012](0012-group-conversation-membership-events.md) | 群会话创建 + 成员管理 + 群事件投影 | complete | `done`, `blocked-by:0011` | 2026-07-20 |
 | [0013](0013-group-fanout-tiering-hot-group-protection.md) | 群消息扇出 + 分级策略 + 热点群保护 | complete | `done`, `blocked-by:0012` | 2026-07-20 |
