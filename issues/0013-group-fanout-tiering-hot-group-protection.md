@@ -1,8 +1,8 @@
 ---
 id: "0013"
 title: "群消息扇出 + 分级策略 + 热点群保护"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 parent: "0010"
 blocked_by: ["0012"]
 created_at: 2026-07-20
