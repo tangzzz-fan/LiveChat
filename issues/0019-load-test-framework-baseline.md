@@ -1,8 +1,8 @@
 ---
 id: "0019"
 title: "压测框架与容量基线报告"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["complete"]
 parent: "0010"
 blocked_by: ["0011", "0012", "0013", "0018"]
 created_at: 2026-07-21
