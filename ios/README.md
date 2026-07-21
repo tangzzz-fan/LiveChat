@@ -29,7 +29,9 @@ xcodebuild -project LiveChat.xcodeproj -scheme LiveChat build
 
 ## 状态
 
-P1 学习扩展，当前仅骨架（Entity + Repository 协议 + 消息状态机 + GRDB Schema）。
+P1 学习扩展，当前仅骨架（Entity + Repository 协议 + 消息状态机 + GRDB Schema）。  
+**服务端已支持多 `device_id` 同时在线**；要让几台 iOS「真能聊」，需按 [`docs/iOS多端接入评估与实现.md`](../docs/iOS多端接入评估与实现.md) 接真实 HTTP/WS。API 见 [`docs/API参考.md`](../docs/API参考.md)。
+
 UI 实现在后续 Phase。
 
 ## 关键文件
