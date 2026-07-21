@@ -1,8 +1,8 @@
 ---
 id: "0021"
 title: "iOS 客户端架构骨架（P1 学习扩展）"
-status: ready-for-agent
-labels: ["ready-for-agent", "p1"]
+status: complete
+labels: ["complete", "p1"]
 parent: "0010"
 blocked_by: []
 created_at: 2026-07-21
