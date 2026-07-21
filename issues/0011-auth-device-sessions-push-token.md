@@ -1,8 +1,8 @@
 ---
 id: "0011"
 title: "认证收敛 + 设备会话管理 + Push Token 注册"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 parent: "0010"
 blocked_by: []
 created_at: 2026-07-20
