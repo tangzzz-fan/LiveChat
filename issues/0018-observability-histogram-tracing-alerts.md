@@ -1,8 +1,8 @@
 ---
 id: "0018"
 title: "可观测性升级：Histogram 指标、分布式追踪与告警规则"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["complete"]
 parent: "0010"
 blocked_by: ["0016"]
 created_at: 2026-07-21
