@@ -51,7 +51,7 @@
 - 同一 user_id 并发连接请求只处理第一个——其余返回 429
 - Gateway 无状态：连接状态在进程内存，路由在 Redis，单节点过载时 LB 自然导流
 
-代码：`livechat-server/internal/gateway/manager.go` — `HandleUpgrade()` 限流尚未在 P0 代码中实现（当前为单实例开发模式），但设计已预留。
+代码：`livechat-server/internal/gateway/manager.go` — `HandleUpgrade()` 接入 `ConnectionLimiter`（每 IP ≤5/s、每 user ≤2/s，超限 HTTP 429 / ErrorFrame 4029）。客户端退避见 `reconnect.go`。
 
 ## 替代方案及取舍
 

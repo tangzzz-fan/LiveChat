@@ -28,7 +28,7 @@ build:
 
 # ── Test ─────────────────────────────────────────────
 test:
-	go test ./... -count=1 -timeout=60s
+	go test ./... -count=1 -timeout=60s -p 1
 
 test-integration:
 	go test ./... -count=1 -timeout=120s -tags=integration

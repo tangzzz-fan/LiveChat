@@ -1406,6 +1406,8 @@ func doJSONRequest(t *testing.T, handler http.Handler, method, path string, body
 	}
 
 	req := httptest.NewRequest(method, path, bytes.NewReader(payload))
+	// Unique RemoteAddr avoids shared Redis per-IP OTP rate limits (20/hour) across the suite.
+	req.RemoteAddr = fmt.Sprintf("127.0.0.1:%d", time.Now().UnixNano()%60000+10000)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

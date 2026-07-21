@@ -84,6 +84,7 @@ type Manager struct {
 	nodeID  string
 	ackFwd  AckForwarder
 	syncSeq SyncSequenceProvider
+	limiter *ConnectionLimiter
 
 	mu       sync.RWMutex
 	sessions map[string]*Session // sessionID -> Session
@@ -97,6 +98,7 @@ func NewManager(authSvc *auth.Service, rdb *redis.Client, nodeID string, heartbe
 		authSvc:           authSvc,
 		rdb:               rdb,
 		nodeID:            nodeID,
+		limiter:           NewConnectionLimiter(),
 		sessions:          make(map[string]*Session),
 		heartbeatInterval: heartbeatInterval,
 		readTimeout:       readTimeout,
@@ -113,6 +115,12 @@ func (m *Manager) SetSyncSequenceProvider(provider SyncSequenceProvider) {
 
 // HandleUpgrade performs WebSocket upgrade and handshake.
 func (m *Manager) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
+	// Spec 05 §6.2: reject before upgrade when IP budget is exhausted.
+	if m.limiter != nil && !m.limiter.AllowIP(r) {
+		http.Error(w, "too many connection attempts from this IP", http.StatusTooManyRequests)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("ws upgrade failed", "error", err)
@@ -162,6 +170,17 @@ func (m *Manager) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	userID := claims.UserID
 	deviceID := claims.DeviceID
 	sessionID := generateSessionID(userID, deviceID)
+
+	if m.limiter != nil && !m.limiter.AllowUser(userID) {
+		errFrame, _ := NewFrame(OpError, &livechat.ErrorFrame{
+			ErrorCode: 4029, Message: "too many connection attempts for this user",
+			ShouldReconnect: true,
+		})
+		raw, _ := MarshalFrame(errFrame)
+		conn.WriteMessage(websocket.BinaryMessage, raw)
+		conn.Close()
+		return
+	}
 
 	// Kick old session for same user+device
 	m.mu.Lock()

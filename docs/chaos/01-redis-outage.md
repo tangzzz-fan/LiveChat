@@ -10,7 +10,7 @@ Redis 实例不可用时，Gateway 无法维护新的在线路由，但已建立
 
 ```bash
 # 停止 Redis
-bash scripts/chaos/redis-down.sh
+bash livechat-server/scripts/chaos/redis-down.sh
 
 # 或者手动
 brew services stop redis
@@ -39,10 +39,10 @@ brew services stop redis
 ## 恢复步骤
 
 ```bash
-bash scripts/chaos/redis-up.sh
+bash livechat-server/scripts/chaos/redis-up.sh
 
 # 等待 5 秒后检查
-bash scripts/chaos/health-check.sh
+bash livechat-server/scripts/chaos/health-check.sh
 
 # 验证：注册新用户，发送消息，确认投递
 curl -s -X POST http://localhost:8080/v1/auth/request_code \

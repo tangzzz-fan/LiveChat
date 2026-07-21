@@ -19,7 +19,7 @@ Phase 3 P0 交付物：6 个典型故障场景的演练手册 + 注入/恢复脚
 
 ## 注入/恢复脚本
 
-脚本位于 `scripts/chaos/`：
+脚本位于 `livechat-server/scripts/chaos/`：
 
 ```
 redis-down.sh     → 停止 Redis

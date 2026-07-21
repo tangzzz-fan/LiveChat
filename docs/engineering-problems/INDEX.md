@@ -58,4 +58,6 @@
 | 11 | [推送不重复：在线投递与离线推送之间的重复消息问题](11-push-deduplication-coalescing.md) | `push`, `consistency`, `offline` | WebSocket 断开瞬间同时触发推送和重连，同一消息在两个通道各出现一次。推送 = 触发器而非消息载体 + sync 真相 + 客户端去重 + 30s 频控窗口合并。 |
 | 12 | [缓存三大坑：穿透、击穿、雪崩的场景与对策](12-cache-penetration-blast-avalanche.md) | `scale`, `observability` | 缓存穿透（NULL object 30s TTL）、击穿（SET NX 互斥锁 + double-check）、雪崩（TTL ±20% 随机抖动）。三层防护 + 监控命中率 + 降级路径。 |
 | 13 | [下载 URL 的签名安全：为什么不能直接暴露对象存储路径](13-download-url-hmac-signing.md) | `security`, `durability` | 媒体 URL 不能直接暴露存储路径——每次下载需校验会话成员资格。HMAC-SHA256 签名 URL + 过期时间 + `hmac.Equal` 常量时间比较。含 S3 Presigned URL vs 自签名对比。 |
-| 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念。 |
+| 14 | [跨服务 Trace 传递：为什么 slog 里有 trace_id 仍拼不成完整调用链](14-cross-service-trace-propagation.md) | `observability` | HTTP → gRPC → Outbox → Fanout 的 trace_id/span_id 传递与拼接。 |
+| 15 | [高并发故障模式：IM 系统里什么会先崩](15-high-concurrency-failure-modes.md) | `scale`, `connection`, `fanout` | 对照 Spec 01 容量假设做放大因子推演；串联重连风暴、热点群、Outbox 背压与现有压测/演练缺口。 |
+| — | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 已识别的高并发概念与落地状态（随实现更新）。 |

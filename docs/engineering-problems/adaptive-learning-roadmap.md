@@ -4,20 +4,21 @@
 
 ## 1. 消息投递的实时路径 (gRPC Fanout → Gateway)
 
-**何时会遇到**：当 Outbox Consumer 不止打印日志，而是真的通过 gRPC 推送到 Gateway。
+**何时会遇到**：Outbox Consumer 需要把事件推到 Gateway 在线会话。
 
 **学习目标**：
 - gRPC 的流式投递 vs 单次 RPC 投递
-- Gateway 节点不可达时，Fanout 的 fallback 策略（当前是 Redis 路由 miss → 直接走 sync_events）
+- Gateway 节点不可达时，Fanout 的 fallback（Redis 路由 miss → sync_events）
 
-**当前状态**：P0 已实现 `logDeliverer` (日志占位)。完整 gRPC 投递是第一个要补齐的问题。
+**当前状态（2026-07-21）**：**已基本落地**。`internal/fanout` + outbox-consumer 注册 `message_created` handler；在线走 Deliverer，离线走 sync；热点群返回 `ErrGroupBusy`。后续可加深：跨节点 gRPC 流式与投递 ACK 闭环压测。
 
 ### 已有实现参考 (2026-07-20)
 
 - Outbox Consumer 事件消费循环: `livechat-server/internal/outbox/consumer.go` — `Run()` worker pool
 - Fanout 服务投递编排: `livechat-server/internal/fanout/service.go` — `Fanout()` 查成员 → 在线设备 → 投递或 sync
 - Sync 事件 AppendEvent: `livechat-server/internal/sync/service.go` — `AppendEvent()`
-- LogDeliverer 占位实现: `livechat-server/cmd/outbox-consumer/main.go` — 日志打印投递信息
+- LogDeliverer 占位实现: `livechat-server/cmd/outbox-consumer/main.go` — 历史占位；当前已接真实 Fanout handler
+- 连接限流: `livechat-server/internal/gateway/ratelimit.go` — 每 IP / 每 user token bucket
 
 ## 2. 背压 (Backpressure)
 
@@ -28,7 +29,7 @@
 - Worker pool 动态扩容 vs 固定大小
 - 消费者延迟监控（当前用 metrics lag_seconds）
 
-**DDIA 相关**：Ch11 Stream Processing — 消费者处理速度落后于生产者的处理策略。
+**当前状态（2026-07-21）**：Consumer 固定 worker + pending/lag 可观测；**发送侧按 pending 反压尚未实现**。演练见 `docs/chaos/02-outbox-backpressure.md`。
 
 ### 已有实现参考 (2026-07-20)
 
@@ -56,14 +57,14 @@
 
 ## 4. 热点群聊 (Hotspot Group Chat)
 
-**何时会遇到**：单个群聊的并发写入达到每秒数千条。
+**何时会遇到**：单个群聊的并发写入达到每秒数十到数百条。
 
 **学习目标**：
-- SEQUENCE 作为单写点在高并发下是瓶颈（`nextval()` 在单个 SEQUENCE 上有争抢）
-- 写扩散 vs 读扩散：500 人群聊是否应为每个成员单独写一条 sync_event？
+- SEQUENCE 作为单写点在高并发下是瓶颈
+- 写扩散 vs 读扩散与热点隔离
 - 如何限制热点群的扇出延迟（超时、降级、部分投递）
 
-**DDIA 相关**：Ch6 — Hotspot 处理, Ch9 — 顺序保证的代价。
+**当前状态（2026-07-21）**：**已落地保护**：Redis 60s 窗口 `ZCARD > 50` → `ErrGroupBusy`，Consumer 不重试。压测/演练：`load_test` `group_fanout` + `docs/chaos/06-hot-group-flood.md`。仍需关注：busy 时用户可见性语义是否与产品预期一致。
 
 ### 已有实现参考 (2026-07-20)
 

@@ -2,19 +2,26 @@
 
 LiveChat 是一个面向学习的大规模即时通信系统设计项目，目标是通过规格先行的方式，系统化拆解 WhatsApp 类聊天系统的核心问题：消息正确性、长连接、离线同步、多端一致性、群聊扇出、媒体消息、推送唤醒、安全边界与可观测性。
 
-当前仓库处于规格驱动阶段，核心设计内容集中在 `Specs/` 目录。代码目录会在后续按规格推进逐步落地。
+**快速理解整站架构与高并发 / IM 痛点解法**：先读 [`docs/架构设计总览.md`](docs/架构设计总览.md)。
+
+当前仓库已完成 Phase 1–3 的 P0/P1 学习闭环实现（服务端在 `livechat-server/`），规格仍以 `Specs/` 为设计源。
 
 ## 当前仓库结构
 
 ```text
 LiveChat/
-├── Specs/                # 核心规格文档（当前主工作区）
-├── .agents/skills/       # 已安装的本地技能库
-├── CONTEXT.md            # 项目领域术语表
-├── CLAUDE.md             # 仓库级协作与实现约束
-└── docs/
-    ├── adr/              # 架构决策记录
-    └── agents/           # Matt Pocock skills 的仓库级配置
+├── Specs/                      # 核心规格文档（设计源）
+├── livechat-server/            # Go 服务端（message-service / gateway / outbox-consumer）
+├── load_test/                  # 压测框架与场景
+├── docs/
+│   ├── 架构设计总览.md         # ← 新人 / 复盘首选
+│   ├── adr/                    # 架构决策记录
+│   ├── chaos/                  # 故障演练手册
+│   ├── engineering-problems/   # 工程问题库（痛点→方案）
+│   └── agents/                 # skills 仓库级配置
+├── issues/                     # 本地 ticket 跟踪
+├── CONTEXT.md                  # 领域术语表
+└── CLAUDE.md                   # 仓库级协作约束
 ```
 
 ## 规格目录
@@ -43,13 +50,13 @@ LiveChat/
 
 ## 推荐阅读顺序
 
-1. `Specs/00-规格总览与实施规划.md`
-2. `Specs/02-领域模型与消息生命周期.md`
-3. `Specs/04-消息发送主链路与Outbox模式.md`
-4. `Specs/05-长连接网关与协议设计.md`
-5. `Specs/06-离线同步与多端一致性.md`
-
-这 5 份文档构成消息系统正确性骨架，是后续实现和重构的判断基线。
+1. [`docs/架构设计总览.md`](docs/架构设计总览.md) — 全局拓扑 + IM 痛点对照表
+2. `Specs/00-规格总览与实施规划.md`
+3. `Specs/02-领域模型与消息生命周期.md`
+4. `Specs/04-消息发送主链路与Outbox模式.md`
+5. `Specs/05-长连接网关与协议设计.md`
+6. `Specs/06-离线同步与多端一致性.md`
+7. Phase 实现细节：`livechat-server/docs/Phase1-架构设计说明.md`、`Phase2-架构设计说明.md`
 
 ## Agent 协作入口
 
@@ -57,9 +64,10 @@ LiveChat/
 - 领域术语：`CONTEXT.md`
 - Skill 配置：`docs/agents/`
 - 架构决策：`docs/adr/`
+- 工程问题库：`docs/engineering-problems/`
 
 ## 当前状态
 
-- Matt Pocock skills 已安装到 `.agents/skills/`
-- 仓库级 `README.md`、`CLAUDE.md`、`CONTEXT.md` 与 `docs/agents/` 已补齐
-- 后续实现应以 `Specs/` 为唯一设计源，避免再次漂移到旧的 `specs/SPEC-xxx` 命名体系
+- Phase 1–3 学习闭环已在 `livechat-server/`、`load_test/`、`docs/chaos/` 落地
+- 规格以 `Specs/` 为唯一设计源；领域术语见 `CONTEXT.md`
+- 架构快照入口：`docs/架构设计总览.md`

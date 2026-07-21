@@ -59,7 +59,10 @@ def parse_args():
 
 async def run_scenario(name, args):
     cls = SCENARIOS[name]
-    scenario = cls(args.base_url, args.ws_url)
+    if name == "reconnect_storm":
+        scenario = cls(args.base_url, args.ws_url, jitter_ms=args.jitter_ms, no_jitter=args.no_jitter)
+    else:
+        scenario = cls(args.base_url, args.ws_url)
     concurrency = 10 if args.quick else args.concurrency
     duration = 10 if args.quick else args.duration
 

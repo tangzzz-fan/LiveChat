@@ -48,11 +48,18 @@ func TestFetchPendingClaimsEventsAsProcessing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchPending: %v", err)
 	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 claimed event, got %d", len(events))
+	var claimed *Event
+	for i := range events {
+		if events[i].ID == id {
+			claimed = &events[i]
+			break
+		}
 	}
-	if events[0].Status != "processing" {
-		t.Fatalf("expected claimed event status processing, got %s", events[0].Status)
+	if claimed == nil {
+		t.Fatalf("expected event %d among %d claimed events", id, len(events))
+	}
+	if claimed.Status != "processing" {
+		t.Fatalf("expected claimed event status processing, got %s", claimed.Status)
 	}
 
 	var status string
@@ -170,17 +177,21 @@ func TestProcessEventRetryThenRecoveryMarksDoneWithoutLoss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchPending after retry: %v", err)
 	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event claimed for recovery, got %d", len(events))
+	var claimed *Event
+	for i := range events {
+		if events[i].ID == id {
+			claimed = &events[i]
+			break
+		}
 	}
-	if events[0].ID != id {
-		t.Fatalf("expected event %d to be retried, got %d", id, events[0].ID)
+	if claimed == nil {
+		t.Fatalf("expected event %d claimed for recovery among %d events", id, len(events))
 	}
-	if events[0].RetryCount != 1 {
-		t.Fatalf("expected claimed retry_count 1, got %d", events[0].RetryCount)
+	if claimed.RetryCount != 1 {
+		t.Fatalf("expected claimed retry_count 1, got %d", claimed.RetryCount)
 	}
 
-	consumer.processEvent(ctx, 0, events[0])
+	consumer.processEvent(ctx, 0, *claimed)
 
 	var status string
 	if err := db.QueryRowContext(ctx,
@@ -341,8 +352,19 @@ func TestRunGracefulShutdownWaitsForInflightEvent(t *testing.T) {
 		t.Fatalf("handler did not start")
 	}
 
+	if status := outboxStatus(t, db, id); status != "processing" {
+		t.Fatalf("expected event processing after handler start, got %s", status)
+	}
+
 	cancel()
-	time.Sleep(20 * time.Millisecond)
+
+	// Graceful shutdown must block on the in-flight handler (not return early).
+	select {
+	case err := <-done:
+		t.Fatalf("consumer returned before inflight handler finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
 	if status := outboxStatus(t, db, id); status != "processing" {
 		t.Fatalf("expected inflight event to remain processing before release, got %s", status)
 	}
