@@ -13,7 +13,13 @@
 | [0009](0009-read-receipts-observability.md) | 已读回执 + 多端一致性收敛 + 可观测性 | complete | `done` | 2026-07-20 |
 | [0010](0010-phase-2-user-visible-capabilities.md) | 阶段二：用户可感知能力 — 认证、群聊、媒体与推送 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
 | [0011](0011-auth-device-sessions-push-token.md) | 认证收敛 + 设备会话管理 + Push Token 注册 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
-| [0012](0012-group-conversation-membership-events.md) | 群会话创建 + 成员管理 + 群事件投影 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
-| [0013](0013-group-fanout-tiering-hot-group-protection.md) | 群消息扇出 + 分级策略 + 热点群保护 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
+| [0012](0012-group-conversation-membership-events.md) | 群会话创建 + 成员管理 + 群事件投影 | ready-for-agent | `ready-for-agent`, `blocked-by:0011` | 2026-07-20 |
+| [0013](0013-group-fanout-tiering-hot-group-protection.md) | 群消息扇出 + 分级策略 + 热点群保护 | ready-for-agent | `ready-for-agent`, `blocked-by:0012` | 2026-07-20 |
 | [0014](0014-image-media-upload-thumbnail-download.md) | 图片消息直传 + 缩略图 + 授权下载 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
-| [0015](0015-offline-push-background-wakeup-dedupe.md) | 离线推送编排 + 后台唤醒 + 去重 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
+| [0015](0015-offline-push-background-wakeup-dedupe.md) | 离线推送编排 + 后台唤醒 + 去重 | ready-for-agent | `ready-for-agent`, `blocked-by:0011` | 2026-07-20 |
+| [0016](0016-security-baseline-audit.md) | Phase 3 P0：安全基线加固与审计收敛 | ready-for-agent | `ready-for-agent`, `blocked-by:0011` | 2026-07-21 |
+| [0017](0017-storage-tiering-cache-layer.md) | Phase 3 P1：存储分层与通用缓存层 | ready-for-agent | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0018](0018-observability-histogram-tracing-alerts.md) | Phase 3 P0：可观测性升级 — Histogram 指标、分布式追踪与告警规则 | ready-for-agent | `ready-for-agent`, `blocked-by:0016` | 2026-07-21 |
+| [0019](0019-load-test-framework-baseline.md) | Phase 3 P0：压测框架与容量基线报告 | ready-for-agent | `ready-for-agent`, `blocked-by:0011,0012,0013,0018` | 2026-07-21 |
+| [0020](0020-chaos-engineering-runbooks.md) | Phase 3 P0：故障演练手册与恢复流程 | ready-for-agent | `ready-for-agent`, `blocked-by:0018` | 2026-07-21 |
+| [0021](0021-ios-client-architecture-skeleton.md) | Phase 3 P1：iOS 客户端架构骨架 | ready-for-agent | `ready-for-agent`, `p1` | 2026-07-21 |
