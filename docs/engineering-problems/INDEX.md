@@ -52,4 +52,7 @@
 | 05 | [离线消息缺口：断连期间的消息如何高效补回](05-offline-gap-detection.md) | `offline`, `consistency` | 设备离线 3 小时产生 500 条消息，恢复时需检测缺口、高效拉取、不重不乱序。两层同步（全局事件流 + 会话消息补拉）+ cursor 管理解决。 |
 | 06 | [服务端"消息已接收"不等于客户端"消息已送达"](06-message-lifecycle-stages.md) | `durability`, `consistency` | 收到 HTTP 200 只表示消息已持久化，不代表对端已收到。三阶段生命周期 Accepted → Delivered → Read + 独立 ACK 闭合这个语义差异。 |
 | 07 | [来自 DDIA 的可移植概念](07-ddia-concepts.md) | *（跨领域理论）* | 可靠性、事务隔离、分区、流处理、线性一致、端到端原则等 11 个 DDIA 概念在 LiveChat 项目中的映射（含 P0 代码位置和 P2 扩展点）。 |
+| 08 | [设备吊销与会话版本号：为什么不能只靠 JWT 过期](08-session-version-device-revocation.md) | `security`, `consistency` | JWT 无状态 vs 有状态吊销的矛盾。Session Version 方案：JWT 携带 sv claim，DB 存当前版本，中间件对比，吊销时递增。含 3 种替代方案对比 + 3 条踩坑记录。 |
+| 09 | [两步认证的状态管理：验证码不能放在客户端回传](09-two-step-auth-code-storage.md) | `security`, `idempotency` | request_code → verify_code 两个独立 HTTP 请求之间，验证码必须存在服务端（Redis），决不能放在 JWT 里让客户端回传。含 Mock OTP 策略和频控设计。 |
+| 10 | [群消息写扩散：1 条消息 N 倍写入的代价与控制](10-group-fanout-write-amplification.md) | `fanout`, `scale`, `consistency` | 200 人群 1 条消息 → 199 倍写入放大。三级分层（小群全写扩散 / 中群混合 / 大群读扩散）+ 热点群 Redis Sorted Set 滑动窗口保护。含 WhatsApp vs Telegram 架构对比。 |
 | 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念：gRPC 投递、背压、分片、热点群聊、连接迁移、写扩散 vs 读扩散、Copy-on-Write、结构化日志、Clock Skew、幂等窗口。每个概念标注触发条件 + 学习目标 + 当前实现参考 + DDIA 章节映射。 |
