@@ -4,6 +4,7 @@ title: "阶段二：用户可感知能力 — 认证、群聊、媒体与推送"
 status: ready-for-agent
 labels: ["ready-for-agent"]
 created_at: 2026-07-20
+updated_at: 2026-07-21
 ---
 
 # PRD: 阶段二 — 用户可感知能力（认证、群聊、媒体与推送）
@@ -14,8 +15,8 @@ Phase 1 已经完成消息正确性骨架，`livechat-server/` 具备 1:1 文本
 
 但从真实用户视角看，当前系统仍缺少 Phase 2 所要求的可感知能力：
 
-- 账号体系仍停留在 mock auth，缺少设备会话管理和吊销闭环
-- 无法创建和使用群聊
+- 账号体系仍停留在 mock auth（`register`/`login` 一站式），缺少两步认证流程、设备会话管理、session_version 吊销和审计
+- 群数据模型（groups/group_members/group_events）和 CRUD 已部分实现，但缺 group_events → sync_events 投影、leave 端点和新成员 summary 初始化
 - 无法发送图片等媒体消息
 - 设备离线或 App 进入后台后，没有系统级推送唤醒链路
 
@@ -25,13 +26,23 @@ Phase 1 已经完成消息正确性骨架，`livechat-server/` 具备 1:1 文本
 
 围绕 `Specs/03`、`Specs/07`、`Specs/08`、`Specs/09` 落地 Phase 2 的 5 个垂直切片：
 
-1. 认证收敛、设备会话管理与 Push Token 注册
-2. 群会话创建、成员管理与群事件投影
-3. 群消息扇出、分级策略与热点群保护
-4. 图片消息直传、缩略图生成与授权下载
-5. 离线推送编排、后台唤醒、去重与 Badge 更新
+1. 认证收敛、设备会话管理与 Push Token 注册（0011）
+2. 群会话创建、成员管理与群事件投影（0012）
+3. 群消息扇出、分级策略与热点群保护（0013）
+4. 图片消息直传、缩略图生成与授权下载（0014）
+5. 离线推送编排、后台唤醒、去重与 Badge 更新（0015）
 
-所有切片继续复用 `Spec 02` 中已经定义的 `Message`、`MessageReceipt`、`Conversation`、`SyncCursor` 和消息生命周期语义，避免 Phase 2 再次发明状态模型。
+所有切片继续复用 `Spec 02` 中已经定义的 `Message`、`MessageReceipt`、`Conversation`、`SyncCursor` 和消息生命周期语义。
+
+## Dependency Graph
+
+```
+0011 (Auth) ─────┬─────► 0012 (Group CRUD) ──► 0013 (Group Fanout)
+                 │
+                 └─────► 0015 (Push)
+                 
+0014 (Media) ─── (独立，可与 0011 并行)
+```
 
 ## User Stories
 
@@ -49,3 +60,12 @@ Phase 1 已经完成消息正确性骨架，`livechat-server/` 具备 1:1 文本
 - `0013` 群消息扇出 + 分级策略 + 热点群保护
 - `0014` 图片消息直传 + 缩略图 + 授权下载
 - `0015` 离线推送编排 + 后台唤醒 + 去重
+
+## Implementation Order
+
+推荐实施顺序（按依赖边）：
+
+1. **0011** + **0014** 可并行启动（0014 不依赖 0011，但联调建议在 0011 之后）
+2. **0012** 在 0011 完成后启动
+3. **0015** 在 0011 完成后启动（可与 0012 并行）
+4. **0013** 在 0012 完成后启动
