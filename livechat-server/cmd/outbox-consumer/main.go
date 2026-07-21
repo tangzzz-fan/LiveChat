@@ -21,6 +21,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/outbox"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/push"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/receipts"
 	syncsvc "github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
@@ -70,6 +71,10 @@ func main() {
 	deliverer := newGRPCDeliverer(rdb)
 	defer deliverer.Close()
 	fanoutSvc := fanout.NewService(db, rdb, deliverer, syncSvc)
+
+	// Wire push orchestrator to fanout
+	pushOrch := push.NewOrchestrator(db, rdb, push.NewMockAPNsClient())
+	fanoutSvc.SetPushNotifier(pushOrch)
 
 	consumer := outbox.NewConsumer(db, outbox.Config{
 		PollInterval:     100 * time.Millisecond,

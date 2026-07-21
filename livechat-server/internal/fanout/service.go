@@ -46,7 +46,10 @@ type DeliveryPayload struct {
 	TraceID            string `json:"trace_id"`
 }
 
-// SyncWriter is the interface for appending sync events for offline devices.
+// PushNotifier is the interface for triggering push notifications after fanout.
+type PushNotifier interface {
+	NotifyOffline(ctx context.Context, userID int64, conversationID string, conversationSeq int64, serverMessageID string, latestEventSeq int64, senderName string) error
+}
 type SyncWriter interface {
 	AppendEvent(ctx context.Context, userID int64, eventType string, payload []byte) error
 	AppendEventWithConv(ctx context.Context, userID int64, conversationID, eventType string, payload []byte) error
@@ -58,10 +61,16 @@ type Service struct {
 	rdb       *redis.Client
 	deliverer Deliverer
 	sync      SyncWriter
+	push      PushNotifier
 }
 
 func NewService(db *sql.DB, rdb *redis.Client, deliverer Deliverer, sync SyncWriter) *Service {
 	return &Service{db: db, rdb: rdb, deliverer: deliverer, sync: sync}
+}
+
+// SetPushNotifier optionally enables push notification after fanout.
+func (s *Service) SetPushNotifier(p PushNotifier) {
+	s.push = p
 }
 
 // Fanout delivers a message to all conversation members' online devices
@@ -130,6 +139,12 @@ func (s *Service) Fanout(ctx context.Context, event domain.OutboxEvent) error {
 			s.deliverToOnlineDevices(ctx, memberID, delivery)
 		}
 		// Large group (>200): sync-only, no realtime delivery
+
+		// After fanout: if member is offline, trigger push notification
+		if s.push != nil {
+			_ = s.push.NotifyOffline(ctx, memberID, p.ConversationID, p.ConversationSeq,
+				p.ServerMessageID, 0 /* latestEventSeq filled by push orchestrator */, "")
+		}
 	}
 
 	return nil

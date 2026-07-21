@@ -274,6 +274,21 @@ func (o *Orchestrator) HandleBadDeviceToken(ctx context.Context, pushToken strin
 	return nil
 }
 
+// NotifyOffline implements fanout.PushNotifier.
+// It triggers push notification for a member who may be offline.
+func (o *Orchestrator) NotifyOffline(ctx context.Context, userID int64, conversationID string, conversationSeq int64, serverMessageID string, latestEventSeq int64, senderName string) error {
+	req := PushRequest{
+		UserID:          userID,
+		ConversationID:  conversationID,
+		ConversationSeq: conversationSeq,
+		ServerMessageID: serverMessageID,
+		LatestEventSeq:  latestEventSeq,
+		SenderName:      senderName,
+	}
+	_, err := o.DecideAndPush(ctx, req)
+	return err
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
