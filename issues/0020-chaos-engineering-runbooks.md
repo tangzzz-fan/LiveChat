@@ -1,8 +1,8 @@
 ---
 id: "0020"
 title: "故障演练手册与恢复流程"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["complete"]
 parent: "0010"
 blocked_by: ["0018"]
 created_at: 2026-07-21
