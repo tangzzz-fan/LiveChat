@@ -180,12 +180,14 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 
 ## 7. 推荐的下一张 ticket（若要继续实现）
 
-可拆为连续可演示切片（示例）：
+可拆为连续可演示切片（已建票）：
 
-1. **0022** iOS AuthRepositoryLive + Keychain + 登录 UI  
-2. **0023** HTTP Message/Sync/Conversation Repository + GRDB 投影  
-3. **0024** WebSocketRepository（Protobuf 握手 + 投递）  
-4. **0025**（可选）服务端 `POST /v1/conversations/direct`  
-5. **0026** 最小双端聊天 UI + 联调 runbook  
+1. **[0022](../../issues/0022-ios-auth-otp-keychain-login-ui.md)** iOS AuthRepositoryLive + Keychain + 登录 UI  
+2. **[0023](../../issues/0023-ios-local-first-send-grdb-http.md)** HTTP Message/Sync 前的发送 + GRDB 投影  
+3. **[0024](../../issues/0024-ios-incremental-sync-executor.md)** WebSocket 前的增量同步  
+4. **[0025](../../issues/0025-ios-websocket-realtime-delivery.md)** WebSocketRepository（Protobuf 握手 + 投递）  
+5. **[0026](../../issues/0026-server-direct-conversation-api.md)**（可选并行）服务端 `direct` 建会话  
+6. **[0027](../../issues/0027-ios-image-media-send-display.md)** 图片消息  
+7. **[0028](../../issues/0028-ios-push-token-silent-sync.md)** 推送 token + 静默 sync  
 
-当前仓库 **不必改服务端也能开始 0022–0024**；0025 仅改善产品体验。
+当前仓库 **不必改服务端也能开始 0022–0025**；0026 改善私聊体验。

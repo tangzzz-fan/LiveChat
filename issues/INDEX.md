@@ -23,3 +23,10 @@
 | [0019](0019-load-test-framework-baseline.md) | Phase 3 P0：压测框架与容量基线报告 | complete | `done`, `blocked-by:0011,0012,0013,0018` | 2026-07-21 |
 | [0020](0020-chaos-engineering-runbooks.md) | Phase 3 P0：故障演练手册与恢复流程 | complete | `done`, `blocked-by:0018` | 2026-07-21 |
 | [0021](0021-ios-client-architecture-skeleton.md) | Phase 3 P1：iOS 客户端架构骨架 | complete | `done`, `p1` | 2026-07-21 |
+| [0022](0022-ios-auth-otp-keychain-login-ui.md) | iOS 登录：OTP + Keychain + 最小登录 UI | open | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0023](0023-ios-local-first-send-grdb-http.md) | iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话 | open | `ready-for-agent`, `p1`, `blocked-by:0022` | 2026-07-21 |
+| [0024](0024-ios-incremental-sync-executor.md) | iOS 增量同步：SyncExecutor + 多端补拉 | open | `ready-for-agent`, `p1`, `blocked-by:0023` | 2026-07-21 |
+| [0025](0025-ios-websocket-realtime-delivery.md) | iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
+| [0026](0026-server-direct-conversation-api.md) | 服务端 1:1 建会话 API | open | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0027](0027-ios-image-media-send-display.md) | iOS 图片消息：上传 + 发送 + 展示 | open | `ready-for-agent`, `p1`, `blocked-by:0025` | 2026-07-21 |
+| [0028](0028-ios-push-token-silent-sync.md) | iOS 推送 Token 注册 + 静默唤醒触发 sync | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
