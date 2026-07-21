@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -90,7 +91,13 @@ func main() {
 		domainEvent.Status = event.Status
 		domainEvent.RetryCount = event.RetryCount
 		domainEvent.CreatedAt = event.CreatedAt
-		return fanoutSvc.Fanout(ctx, domainEvent)
+		err := fanoutSvc.Fanout(ctx, domainEvent)
+		if errors.Is(err, fanout.ErrGroupBusy) {
+			// Hot group: do not retry, event was dropped intentionally
+			slog.Warn("hot group event dropped", "aggregate_id", event.AggregateID)
+			return nil
+		}
+		return err
 	})
 
 	consumer.RegisterHandler("delivery_acked", func(ctx context.Context, event outbox.Event) error {
