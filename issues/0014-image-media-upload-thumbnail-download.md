@@ -1,8 +1,8 @@
 ---
 id: "0014"
 title: "图片消息直传 + 缩略图 + 授权下载"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 parent: "0010"
 blocked_by: []
 created_at: 2026-07-20
