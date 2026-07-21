@@ -56,3 +56,4 @@
 | 09 | [两步认证的状态管理：验证码不能放在客户端回传](09-two-step-auth-code-storage.md) | `security`, `idempotency` | request_code → verify_code 两个独立 HTTP 请求之间，验证码必须存在服务端（Redis），决不能放在 JWT 里让客户端回传。含 Mock OTP 策略和频控设计。 |
 | 10 | [群消息写扩散：1 条消息 N 倍写入的代价与控制](10-group-fanout-write-amplification.md) | `fanout`, `scale`, `consistency` | 200 人群 1 条消息 → 199 倍写入放大。三级分层（小群全写扩散 / 中群混合 / 大群读扩散）+ 热点群 Redis Sorted Set 滑动窗口保护。含 WhatsApp vs Telegram 架构对比。 |
 | 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念：gRPC 投递、背压、分片、热点群聊、连接迁移、写扩散 vs 读扩散、Copy-on-Write、结构化日志、Clock Skew、幂等窗口。每个概念标注触发条件 + 学习目标 + 当前实现参考 + DDIA 章节映射。 |
+| 11 |
