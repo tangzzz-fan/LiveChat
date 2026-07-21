@@ -22,7 +22,7 @@ import (
 func TestRegisterConflictReturns409(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceA := uniqueDeviceID(t, "ios-reg-a")
@@ -53,7 +53,7 @@ func TestRegisterConflictReturns409(t *testing.T) {
 func TestSendMessageEndpointPersistsOutboxDeduplicatesAndAdvancesSeq(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	convID := uniqueConversationID(t, "send-seq")
 	userA := uniqueUserID(t, 1)
@@ -113,7 +113,7 @@ func TestSendMessageEndpointPersistsOutboxDeduplicatesAndAdvancesSeq(t *testing.
 func TestSendMessageEndpointScopesClientMessageIDPerUser(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	convID := uniqueConversationID(t, "send-scope")
 	userA := uniqueUserID(t, 11)
@@ -156,7 +156,7 @@ func TestSendMessageEndpointScopesClientMessageIDPerUser(t *testing.T) {
 func TestSendMessageEndpointRejectsUnauthorizedBadRequestAndNonMember(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	convID := uniqueConversationID(t, "send-errors")
 	userA := uniqueUserID(t, 21)
@@ -210,7 +210,7 @@ func TestSendMessageEndpointRejectsUnauthorizedBadRequestAndNonMember(t *testing
 func TestListConversationsRequiresAuth(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	rec := doJSONRequest(t, router, http.MethodGet, "/v1/conversations", nil, "")
 	if rec.Code != http.StatusUnauthorized {
@@ -221,7 +221,7 @@ func TestListConversationsRequiresAuth(t *testing.T) {
 func TestLoginReturnsJWTAndAllowsProtectedEndpoint(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-login")
@@ -274,7 +274,7 @@ func TestLoginReturnsJWTAndAllowsProtectedEndpoint(t *testing.T) {
 func TestHealthReturnsPostgresAndRedisStatus(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	rec := doJSONRequest(t, router, http.MethodGet, "/health", nil, "")
 	if rec.Code != http.StatusOK {
@@ -302,7 +302,7 @@ func TestHealthReturnsPostgresAndRedisStatus(t *testing.T) {
 func TestGetSyncEventsEndpointReturnsEventsLatestSeqAndUpdatesCursor(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	const deviceID = "ios-sync-http"
 	userID := uniqueUserID(t, 31)
@@ -358,7 +358,7 @@ func TestGetSyncEventsEndpointReturnsEventsLatestSeqAndUpdatesCursor(t *testing.
 func TestGetSyncEventsEndpointPaginatesAndCursorOnlyMovesForward(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	const deviceID = "ios-sync-paging"
 	userID := uniqueUserID(t, 41)
@@ -438,7 +438,7 @@ func TestGetSyncEventsEndpointPaginatesAndCursorOnlyMovesForward(t *testing.T) {
 func TestGetSyncEventsEndpointSupports150EventPagination(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	const deviceID = "ios-sync-150"
 	userID := uniqueUserID(t, 43)
@@ -504,7 +504,7 @@ func TestGetSyncEventsEndpointSupports150EventPagination(t *testing.T) {
 func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	convID := uniqueConversationID(t, "gap-recovery")
 	userA := uniqueUserID(t, 51)
@@ -547,7 +547,7 @@ func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
 func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	convID := uniqueConversationID(t, "gap-errors")
 	userA := uniqueUserID(t, 61)
@@ -587,7 +587,7 @@ func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
 func TestCreateGroupAtomicallyCreatesConversationAndOwner(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	userA := uniqueUserID(t, 71)
 	deviceA := uniqueDeviceID(t, "ios-group")
@@ -692,7 +692,7 @@ func TestCreateGroupAtomicallyCreatesConversationAndOwner(t *testing.T) {
 func TestAddMembersUpdatesGroupAndEmitsEvents(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	userA := uniqueUserID(t, 81)
 	userB := uniqueUserID(t, 82)
@@ -771,7 +771,7 @@ func TestAddMembersUpdatesGroupAndEmitsEvents(t *testing.T) {
 func TestLeaveGroupHidesConversationAndPreventsMessages(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	userA := uniqueUserID(t, 91)
 	userB := uniqueUserID(t, 92)
@@ -832,7 +832,7 @@ func TestLeaveGroupHidesConversationAndPreventsMessages(t *testing.T) {
 func TestRemoveMemberRequiresAdminAndCannotRemoveOwner(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	userA := uniqueUserID(t, 101)
 	userB := uniqueUserID(t, 102)
@@ -902,7 +902,7 @@ func TestRemoveMemberRequiresAdminAndCannotRemoveOwner(t *testing.T) {
 func TestRequestCodeReturnsRetryAfterAndExpiresIn(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 
@@ -931,7 +931,7 @@ func TestRequestCodeReturnsRetryAfterAndExpiresIn(t *testing.T) {
 func TestRequestCodeRejectsInvalidE164Format(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	invalidPhones := []string{
 		"15551234567", // no leading +
@@ -952,7 +952,7 @@ func TestRequestCodeRejectsInvalidE164Format(t *testing.T) {
 func TestVerifyCodeCreatesNewUserAndReturnsTokens(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-vc")
@@ -1004,7 +1004,7 @@ func TestVerifyCodeCreatesNewUserAndReturnsTokens(t *testing.T) {
 func TestVerifyCodeRejectsExpiredOrMissingCode(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-vc-exp")
@@ -1024,7 +1024,7 @@ func TestVerifyCodeRejectsExpiredOrMissingCode(t *testing.T) {
 func TestDeviceRevocationRejectsFutureRequests(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-revoke")
@@ -1067,7 +1067,7 @@ func TestDeviceRevocationRejectsFutureRequests(t *testing.T) {
 func TestPushTokenBindingAndUpdate(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-push")
@@ -1115,7 +1115,7 @@ func TestPushTokenBindingAndUpdate(t *testing.T) {
 func TestListDevicesIncludesSessionVersion(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-sv")
@@ -1173,7 +1173,7 @@ func TestListDevicesIncludesSessionVersion(t *testing.T) {
 func TestOldRegisterStillWorks(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-old-reg")
@@ -1214,7 +1214,7 @@ func TestOldRegisterStillWorks(t *testing.T) {
 func TestGroupMessageFanoutRejectsRemovedMember(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	userA := uniqueUserID(t, 201)
 	userB := uniqueUserID(t, 202)
@@ -1291,7 +1291,7 @@ func TestGroupMessageFanoutRejectsRemovedMember(t *testing.T) {
 func TestRefreshTokenRotationWorksAfterRevocation(t *testing.T) {
 	db := openAPITestDB(t)
 	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
-	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc, nil)
 
 	phone := uniquePhone(t)
 	deviceID := uniqueDeviceID(t, "ios-refresh-revoke")

@@ -21,6 +21,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/domain"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/group"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/media"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/messages"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/metrics"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
@@ -28,7 +29,7 @@ import (
 )
 
 // Router builds the HTTP handler tree for Message Service.
-func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handler {
+func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *media.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	msgSvc := messages.NewService(db)
@@ -71,6 +72,17 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux.Handle("DELETE /v1/groups/{gid}/members/{uid}", authMw.Wrap(http.HandlerFunc(handleRemoveGroupMember(groupSvc))))
 	mux.Handle("POST /v1/groups/{gid}/leave", authMw.Wrap(http.HandlerFunc(handleLeaveGroup(groupSvc))))
 	mux.Handle("GET /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleListGroupMembers(groupSvc))))
+
+	// Media endpoints (P0)
+	if mediaSvc != nil {
+		mux.Handle("POST /v1/media/upload/initiate", authMw.Wrap(http.HandlerFunc(handleMediaUploadInitiate(mediaSvc))))
+		mux.Handle("GET /v1/media/upload/{uploadID}/status", authMw.Wrap(http.HandlerFunc(handleMediaUploadStatus(mediaSvc))))
+		mux.Handle("POST /v1/media/upload/{uploadID}/complete", authMw.Wrap(http.HandlerFunc(handleMediaUploadComplete(mediaSvc))))
+		mux.Handle("POST /v1/media/download/auth", authMw.Wrap(http.HandlerFunc(handleMediaDownloadAuth(mediaSvc))))
+		// Part upload and download endpoints are public (presigned URLs carry their own auth)
+		mux.HandleFunc("PUT /media/upload-part/", handleMediaUploadPart(mediaSvc))
+		mux.HandleFunc("GET /media/download/", handleMediaDownload(mediaSvc))
+	}
 
 	return withLogging(securityHeaders(mux))
 }
@@ -571,6 +583,24 @@ func handleSendMessage(svc *messages.Service) http.HandlerFunc {
 		}
 		if req.MessageType == "" {
 			req.MessageType = "text"
+		}
+
+		// Validate image message: attachment metadata is required
+		if req.MessageType == domain.MessageTypeImage {
+			var content map[string]interface{}
+			if err := json.Unmarshal([]byte(req.Content), &content); err != nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse("invalid content JSON for image message"))
+				return
+			}
+			att, ok := content["attachment"].(map[string]interface{})
+			if !ok {
+				writeJSON(w, http.StatusBadRequest, errorResponse("image messages require an 'attachment' field in content"))
+				return
+			}
+			if att["object_key"] == nil || att["mime_type"] == nil || att["size_bytes"] == nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse("image attachment requires object_key, mime_type, and size_bytes"))
+				return
+			}
 		}
 
 		userID := UserIDFromContext(r.Context())
@@ -1145,4 +1175,113 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ── Media handlers ─────────────────────────────────
+
+func handleMediaUploadInitiate(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		var req media.UploadInitiateReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		resp, err := svc.InitiateUpload(r.Context(), userID, req)
+		if err != nil {
+			slog.Error("initiate upload", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse(err.Error()))
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleMediaDownloadAuth(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		var req media.DownloadAuthReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		resp, err := svc.AuthorizeDownload(r.Context(), userID, req)
+		if err != nil {
+			slog.Error("authorize download", "error", err)
+			writeJSON(w, http.StatusForbidden, errorResponse("not authorized"))
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleMediaUploadStatus(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uploadID := r.PathValue("uploadID")
+		if uploadID == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("uploadID is required"))
+			return
+		}
+		resp, err := svc.UploadStatus(r.Context(), uploadID)
+		if err != nil {
+			slog.Error("upload status", "error", err)
+			writeJSON(w, http.StatusNotFound, errorResponse("upload not found"))
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleMediaUploadComplete(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uploadID := r.PathValue("uploadID")
+		var req media.UploadCompleteReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		if req.ObjectKey == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("object_key is required"))
+			return
+		}
+		if err := svc.CompleteUpload(r.Context(), req.ObjectKey, uploadID, req.Parts); err != nil {
+			slog.Error("complete upload", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to complete upload"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "completed"})
+	}
+}
+
+// handleMediaUploadPart serves PUT /media/upload-part/{uploadID}/{partNumber}?exp=...&sig=...
+// This is a public endpoint — auth is via presigned URL HMAC signature.
+func handleMediaUploadPart(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse("method not allowed"))
+			return
+		}
+		if err := svc.ServeUploadPart(r); err != nil {
+			slog.Error("upload part", "error", err)
+			writeJSON(w, http.StatusForbidden, errorResponse(err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// handleMediaDownload serves GET /media/download/{key}?exp=...&sig=...
+// This is a public endpoint — auth is via presigned URL HMAC signature.
+func handleMediaDownload(svc *media.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, errorResponse("method not allowed"))
+			return
+		}
+		if err := svc.ServeDownload(w, r); err != nil {
+			slog.Error("media download", "error", err)
+			writeJSON(w, http.StatusForbidden, errorResponse(err.Error()))
+			return
+		}
+	}
 }

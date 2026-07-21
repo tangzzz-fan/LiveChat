@@ -14,6 +14,7 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/media"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/receipts"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/sync"
 	livechat "github.com/tangzzz-fan/LiveChat/livechat-server/proto"
@@ -67,8 +68,42 @@ func main() {
 		30*24*time.Hour,
 	)
 
+	// Media store (P0: local filesystem)
+	mediaStore := media.NewLocalObjectStore("data/storage", "livechat-dev-media-sign-secret")
+	mediaSvc := media.NewService(db, mediaStore)
+
+	// Thumbnail worker: process thumbnail jobs from a buffered channel
+	thumbnailCh := make(chan media.ThumbnailJob, 64)
+	mediaSvc.SetThumbnailChannel(thumbnailCh)
+	go func() {
+		for job := range thumbnailCh {
+			if err := mediaSvc.GenerateThumbnail(context.Background(), job.ObjectKey); err != nil {
+				slog.Error("thumbnail generation failed", "object_key", job.ObjectKey, "error", err)
+			} else {
+				slog.Info("thumbnail generated", "object_key", job.ObjectKey)
+			}
+		}
+	}()
+
+	// Orphan cleanup: every 10 minutes, mark stale attachments as orphan
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				rows, dirs, err := mediaSvc.CleanupOrphans(context.Background())
+				if err != nil {
+					slog.Error("orphan cleanup failed", "error", err)
+				} else {
+					slog.Info("orphan cleanup done", "rows_orphaned", rows, "dirs_cleaned", dirs)
+				}
+			}
+		}
+	}()
+
 	// Router
-	mux := api.NewRouter(db, rdb, authSvc)
+	mux := api.NewRouter(db, rdb, authSvc, mediaSvc)
 	syncSvc := sync.NewService(db)
 	receiptSvc := receipts.NewService(db, syncSvc, conversations.NewService(db))
 

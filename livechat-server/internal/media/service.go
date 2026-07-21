@@ -12,10 +12,13 @@ import (
 	"image"
 	"image/jpeg"
 	_ "image/gif"
+	_ "image/png"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +58,8 @@ func NewLocalObjectStore(baseDir, signSecret string) *LocalObjectStore {
 	}
 	return &LocalObjectStore{baseDir: baseDir, signSecret: signSecret}
 }
+
+func (s *LocalObjectStore) BaseDir() string { return s.baseDir }
 
 func (s *LocalObjectStore) InitiateMultipartUpload(_ context.Context, key string, _ string) (string, error) {
 	uploadID := fmt.Sprintf("upload_%d", time.Now().UnixNano())
@@ -140,11 +145,6 @@ func (s *LocalObjectStore) PresignDownload(_ context.Context, key string, expire
 	return fmt.Sprintf("/media/download/%s?exp=%d&sig=%s", urlEncode(key), exp, sig), nil
 }
 
-func urlEncode(s string) string {
-	// Simple URL-safe encoding
-	return strings.ReplaceAll(strings.ReplaceAll(s, "/", "_"), "+", "-")
-}
-
 func (s *LocalObjectStore) CleanupUpload(_ context.Context, _, uploadID string) error {
 	dir := filepath.Join(s.baseDir, "uploads", uploadID)
 	return os.RemoveAll(dir)
@@ -156,15 +156,48 @@ func (s *LocalObjectStore) sign(payload string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// VerifySignature validates an HMAC presigned-download signature.
+func (s *LocalObjectStore) VerifySignature(key string, exp, sig string) bool {
+	expected := s.sign(fmt.Sprintf("%s|%s", key, exp))
+	return hmac.Equal([]byte(expected), []byte(sig))
+}
+
+func urlEncode(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "/", "_"), "+", "-")
+}
+
+func urlDecode(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "_", "/"), "-", "+")
+}
+
+// ── Thumbnail job ─────────────────────────────────
+
+// ThumbnailJob is enqueued after upload completion.
+type ThumbnailJob struct {
+	ObjectKey string `json:"object_key"`
+}
+
 // ── Service ───────────────────────────────────────
 
 type Service struct {
-	db    *sql.DB
-	store ObjectStore
+	db            *sql.DB
+	store         ObjectStore
+	thumbnailCh   chan ThumbnailJob
+	signSecret    string
 }
 
 func NewService(db *sql.DB, store ObjectStore) *Service {
-	return &Service{db: db, store: store}
+	return &Service{
+		db:         db,
+		store:      store,
+		signSecret: store.(*LocalObjectStore).signSecret,
+	}
+}
+
+// SetThumbnailChannel wires the thumbnail channel so CompleteUpload
+// can enqueue jobs for the worker goroutine.
+func (s *Service) SetThumbnailChannel(ch chan ThumbnailJob) {
+	s.thumbnailCh = ch
 }
 
 const (
@@ -182,6 +215,8 @@ const (
 
 var validMIMETypes = map[string]bool{
 	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
 }
 
 // ── Request / Response types ──────────────────────
@@ -209,6 +244,12 @@ type UploadStatusResp struct {
 	Status         string `json:"status"`
 	CompletedParts []Part `json:"completed_parts"`
 	ExpiresAtMs    int64  `json:"expires_at_ms"`
+}
+
+type UploadCompleteReq struct {
+	UploadID  string `json:"upload_id"`
+	ObjectKey string `json:"object_key"`
+	Parts     []Part `json:"parts"`
 }
 
 type DownloadAuthReq struct {
@@ -251,6 +292,7 @@ func (s *Service) InitiateUpload(ctx context.Context, userID int64, req UploadIn
 		pURLs = append(pURLs, url)
 	}
 
+	// message_id is now nullable (migration 012) so upload can happen before message creation.
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO attachments (object_key, mime_type, size_bytes, width, height, upload_status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
@@ -270,12 +312,28 @@ func (s *Service) InitiateUpload(ctx context.Context, userID int64, req UploadIn
 }
 
 func (s *Service) UploadStatus(ctx context.Context, uploadID string) (*UploadStatusResp, error) {
-	var objectKey string
-	err := s.db.QueryRowContext(ctx,
-		"SELECT object_key FROM attachments WHERE object_key IS NOT NULL ORDER BY created_at DESC LIMIT 1",
-	).Scan(&objectKey)
+	// Read object_key from the upload directory's meta.json (exact match, not LIMIT 1).
+	meta, err := os.ReadFile(filepath.Join(s.store.(*LocalObjectStore).baseDir, "uploads", uploadID, "meta.json"))
 	if err != nil {
-		return nil, fmt.Errorf("find attachment: %w", err)
+		return nil, fmt.Errorf("upload not found: %w", err)
+	}
+	var metaMap map[string]string
+	if err := json.Unmarshal(meta, &metaMap); err != nil {
+		return nil, fmt.Errorf("malformed upload meta: %w", err)
+	}
+	objectKey, ok := metaMap["key"]
+	if !ok {
+		return nil, fmt.Errorf("upload meta missing object key")
+	}
+
+	var dbStatus string
+	err = s.db.QueryRowContext(ctx,
+		"SELECT upload_status FROM attachments WHERE object_key=$1", objectKey,
+	).Scan(&dbStatus)
+	if err == sql.ErrNoRows {
+		dbStatus = StatusPending
+	} else if err != nil {
+		return nil, fmt.Errorf("lookup attachment: %w", err)
 	}
 
 	parts, err := s.store.ListCompletedParts(ctx, objectKey, uploadID)
@@ -286,22 +344,151 @@ func (s *Service) UploadStatus(ctx context.Context, uploadID string) (*UploadSta
 	return &UploadStatusResp{
 		UploadID:       uploadID,
 		ObjectKey:      objectKey,
-		Status:         "in_progress",
+		Status:         dbStatus,
 		CompletedParts: parts,
 		ExpiresAtMs:    time.Now().Add(uploadExpiry).UnixMilli(),
 	}, nil
 }
 
 func (s *Service) CompleteUpload(ctx context.Context, objectKey, uploadID string, parts []Part) error {
-	err := s.store.CompleteMultipartUpload(ctx, objectKey, uploadID, parts)
+	if err := s.store.CompleteMultipartUpload(ctx, objectKey, uploadID, parts); err != nil {
+		return err
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE attachments SET upload_status=$1, updated_at=NOW() WHERE object_key=$2`,
+		StatusProcessing, objectKey,
+	)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE attachments SET upload_status=$1, updated_at=NOW() WHERE object_key=$2`,
-		StatusProcessing, objectKey,
-	)
+	// Enqueue thumbnail generation
+	if s.thumbnailCh != nil {
+		select {
+		case s.thumbnailCh <- ThumbnailJob{ObjectKey: objectKey}:
+		default:
+			slog.Warn("thumbnail channel full, dropping job", "object_key", objectKey)
+		}
+	}
+
+	return nil
+}
+
+// ServeUploadPart handles a presigned part-upload request for the local-filesystem store.
+// It validates the HMAC signature and writes the request body to the part file.
+func (s *Service) ServeUploadPart(r *http.Request) error {
+	// path: /media/upload-part/{uploadID}/{partNumber}?exp=...&sig=...
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/media/upload-part/"), "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid path")
+	}
+	uploadID := parts[0]
+	partNum, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return fmt.Errorf("invalid part number")
+	}
+
+	expStr := r.URL.Query().Get("exp")
+	sig := r.URL.Query().Get("sig")
+	if expStr == "" || sig == "" {
+		return fmt.Errorf("missing exp or sig")
+	}
+
+	store := s.store.(*LocalObjectStore)
+
+	// Read object_key from meta.json
+	meta, err := os.ReadFile(filepath.Join(store.baseDir, "uploads", uploadID, "meta.json"))
+	if err != nil {
+		return fmt.Errorf("upload not found: %w", err)
+	}
+	var metaMap map[string]string
+	if err := json.Unmarshal(meta, &metaMap); err != nil {
+		return fmt.Errorf("malformed upload meta: %w", err)
+	}
+	objectKey, ok := metaMap["key"]
+	if !ok {
+		return fmt.Errorf("upload meta missing object key")
+	}
+
+	// Validate signature
+	expectedSig := store.sign(fmt.Sprintf("%s|%s|%d|%s", objectKey, uploadID, partNum, expStr))
+	if !hmac.Equal([]byte(expectedSig), []byte(sig)) {
+		return fmt.Errorf("invalid signature")
+	}
+
+	// Check expiry
+	exp, _ := strconv.ParseInt(expStr, 10, 64)
+	if time.Now().Unix() > exp {
+		return fmt.Errorf("upload URL expired")
+	}
+
+	// Write part file
+	dir := filepath.Join(store.baseDir, "uploads", uploadID)
+	// Must match CompleteMultipartUpload / ListCompletedParts: part_%d (not zero-padded).
+	partPath := filepath.Join(dir, fmt.Sprintf("part_%d", partNum))
+	f, err := os.Create(partPath)
+	if err != nil {
+		return fmt.Errorf("create part file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, r.Body); err != nil {
+		return fmt.Errorf("write part: %w", err)
+	}
+	return nil
+}
+
+// ServeDownload validates an HMAC presigned download URL and serves the file.
+func (s *Service) ServeDownload(w http.ResponseWriter, r *http.Request) error {
+	// path: /media/download/{encodedKey}?exp=...&sig=...
+	encodedKey := strings.TrimPrefix(r.URL.Path, "/media/download/")
+	if encodedKey == "" {
+		return fmt.Errorf("missing key")
+	}
+
+	expStr := r.URL.Query().Get("exp")
+	sig := r.URL.Query().Get("sig")
+	if expStr == "" || sig == "" {
+		return fmt.Errorf("missing exp or sig")
+	}
+
+	key := urlDecode(encodedKey)
+
+	store := s.store.(*LocalObjectStore)
+	if !store.VerifySignature(key, expStr, sig) {
+		return fmt.Errorf("invalid signature")
+	}
+
+	exp, _ := strconv.ParseInt(expStr, 10, 64)
+	if time.Now().Unix() > exp {
+		return fmt.Errorf("download URL expired")
+	}
+
+	data, err := s.store.GetObject(r.Context(), key)
+	if err != nil {
+		return fmt.Errorf("get object: %w", err)
+	}
+
+	var mimeType string
+	_ = s.db.QueryRowContext(r.Context(),
+		"SELECT mime_type FROM attachments WHERE object_key=$1", key,
+	).Scan(&mimeType)
+	if mimeType == "" {
+		if strings.HasSuffix(key, ".jpg") || strings.HasSuffix(key, ".jpeg") {
+			mimeType = "image/jpeg"
+		} else if strings.HasSuffix(key, ".png") {
+			mimeType = "image/png"
+		} else {
+			mimeType = "application/octet-stream"
+		}
+	}
+
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(data)
 	return err
 }
 
@@ -395,28 +582,46 @@ func (s *Service) AuthorizeDownload(ctx context.Context, userID int64, req Downl
 }
 
 // CleanupOrphans marks attachments that have been pending for >24 hours as orphaned.
-func (s *Service) CleanupOrphans(ctx context.Context) (int64, error) {
+// Also removes lingering upload directories on disk.
+// Returns the number of orphaned rows and the cleaned-up directory count.
+func (s *Service) CleanupOrphans(ctx context.Context) (rowsAffected int64, dirsCleaned int, err error) {
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE attachments SET upload_status=$1, updated_at=NOW()
 		 WHERE upload_status=$2 AND created_at < NOW() - INTERVAL '24 hours'`,
 		StatusOrphan, StatusPending,
 	)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return result.RowsAffected()
+	rows, _ := result.RowsAffected()
+
+	// Also clean up stale upload directories (>24h old)
+	store := s.store.(*LocalObjectStore)
+	uploadsDir := filepath.Join(store.baseDir, "uploads")
+	entries, err := os.ReadDir(uploadsDir)
+	if err != nil {
+		return rows, 0, nil // non-fatal if dir doesn't exist
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			dir := filepath.Join(uploadsDir, e.Name())
+			if err := os.RemoveAll(dir); err == nil {
+				dirsCleaned++
+			}
+		}
+	}
+	return rows, dirsCleaned, nil
 }
 
-// ── Sign helpers ──────────────────────────────────
-
-func (s *Service) SignDownload(key string, expiresAt int64) string {
-	return s.sign(fmt.Sprintf("%s|%d", key, expiresAt))
-}
-
-func (s *Service) sign(payload string) string {
-	return s.store.(*LocalObjectStore).sign(payload)
-}
-
+// Store exposes the underlying ObjectStore.
 func (s *Service) Store() ObjectStore {
 	return s.store
 }

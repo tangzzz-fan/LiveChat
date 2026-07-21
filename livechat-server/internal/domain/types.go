@@ -58,6 +58,21 @@ type MessageReceipt struct {
 	AckedAt         time.Time `json:"acked_at"`
 }
 
+// Attachment records metadata for an uploaded media object.
+type Attachment struct {
+	ID           int64     `json:"id"`
+	MessageID    string    `json:"message_id,omitempty"`
+	ObjectKey    string    `json:"object_key"`
+	MimeType     string    `json:"mime_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	Width        int       `json:"width"`
+	Height       int       `json:"height"`
+	ThumbnailKey string    `json:"thumbnail_key,omitempty"`
+	UploadStatus string    `json:"upload_status"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 // ConversationSummary is a precomputed projection for the conversation list.
 type ConversationSummary struct {
 	UserID             int64                       `json:"user_id"`
@@ -166,7 +181,8 @@ const (
 // ── Message types ───────────────────────────────────
 
 const (
-	MessageTypeText = "text"
+	MessageTypeText  = "text"
+	MessageTypeImage = "image"
 )
 
 // ── Conversation types ──────────────────────────────
