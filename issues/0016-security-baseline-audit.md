@@ -1,8 +1,8 @@
 ---
 id: "0016"
 title: "安全基线加固与审计收敛"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 parent: "0010"
 blocked_by: ["0011"]
 created_at: 2026-07-21
