@@ -18,8 +18,8 @@
 | [0014](0014-image-media-upload-thumbnail-download.md) | 图片消息直传 + 缩略图 + 授权下载 | complete | `done` | 2026-07-20 |
 | [0015](0015-offline-push-background-wakeup-dedupe.md) | 离线推送编排 + 后台唤醒 + 去重 | complete | `done`, `blocked-by:0011` | 2026-07-20 |
 | [0016](0016-security-baseline-audit.md) | Phase 3 P0：安全基线加固与审计收敛 | complete | `done`, `blocked-by:0011` | 2026-07-21 |
-| [0017](0017-storage-tiering-cache-layer.md) | Phase 3 P1：存储分层与通用缓存层 | ready-for-agent | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0017](0017-storage-tiering-cache-layer.md) | Phase 3 P1：存储分层与通用缓存层 | complete | `done`, `p1` | 2026-07-21 |
 | [0018](0018-observability-histogram-tracing-alerts.md) | Phase 3 P0：可观测性升级 — Histogram 指标、分布式追踪与告警规则 | complete | `done`, `blocked-by:0016` | 2026-07-21 |
 | [0019](0019-load-test-framework-baseline.md) | Phase 3 P0：压测框架与容量基线报告 | complete | `done`, `blocked-by:0011,0012,0013,0018` | 2026-07-21 |
 | [0020](0020-chaos-engineering-runbooks.md) | Phase 3 P0：故障演练手册与恢复流程 | complete | `done`, `blocked-by:0018` | 2026-07-21 |
-| [0021](0021-ios-client-architecture-skeleton.md) | Phase 3 P1：iOS 客户端架构骨架 | ready-for-agent | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0021](0021-ios-client-architecture-skeleton.md) | Phase 3 P1：iOS 客户端架构骨架 | complete | `done`, `p1` | 2026-07-21 |

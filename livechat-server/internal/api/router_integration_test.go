@@ -1209,6 +1209,141 @@ func TestOldRegisterStillWorks(t *testing.T) {
 	}
 }
 
+// ── Phase 2/3 integration tests ──────────────────────────
+
+func TestGroupMessageFanoutRejectsRemovedMember(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	userA := uniqueUserID(t, 201)
+	userB := uniqueUserID(t, 202)
+	userC := uniqueUserID(t, 203)
+	deviceA := "ios-fanout-a"
+	deviceB := "ios-fanout-b"
+	deviceC := "ios-fanout-c"
+	ensureAPIUsers(t, db, []apiUserSeed{
+		{userID: userA, displayName: "Fanout A"},
+		{userID: userB, displayName: "Fanout B"},
+		{userID: userC, displayName: "Fanout C"},
+	})
+	seedAPIDevice(t, db, userA, deviceA, "ios")
+	seedAPIDevice(t, db, userB, deviceB, "ios")
+	seedAPIDevice(t, db, userC, deviceC, "ios")
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userA, userB, userC}, []string{deviceA, deviceB, deviceC})
+	})
+
+	tokenA, _ := authSvc.SignAccessToken(userA, deviceA, 1)
+	tokenC, _ := authSvc.SignAccessToken(userC, deviceC, 1)
+
+	// Create group + add B and C
+	createRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups", map[string]any{"name": "Fanout Test"}, tokenA)
+	var createResp struct {
+		Group          map[string]any `json:"group"`
+		ConversationID string         `json:"conversation_id"`
+	}
+	json.NewDecoder(createRec.Body).Decode(&createResp)
+	groupID := createResp.Group["id"].(string)
+	convID := createResp.ConversationID
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/groups/"+groupID+"/members", map[string]any{
+		"user_ids": []int64{userB, userC},
+	}, tokenA)
+
+	// A sends a message
+	resp := sendMessageRequestAndDecode(t, router, tokenA, map[string]any{
+		"client_message_id": "group-fanout-1",
+		"conversation_id":   convID,
+		"content":           `{"text":"hello group"}`,
+	})
+	if resp.ConversationSeq != 1 {
+		t.Fatalf("expected seq 1, got %d", resp.ConversationSeq)
+	}
+
+	// Owner A removes C from the group
+	rec := doJSONRequest(t, router, http.MethodDelete,
+		"/v1/groups/"+groupID+"/members/"+fmt.Sprintf("%d", userC), nil, tokenA)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("remove C: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// C should NOT be able to send to the group
+	rec = doJSONRequest(t, router, http.MethodPost, "/v1/messages/send", map[string]any{
+		"client_message_id": "group-fanout-forbidden",
+		"conversation_id":   convID,
+		"content":           `{"text":"should fail"}`,
+	}, tokenC)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected removed member to get 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM group_events WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM conversation_summaries WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversation_members WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversations WHERE id=$1", convID)
+		db.Exec("DELETE FROM group_members WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM groups WHERE id=$1", groupID)
+	})
+}
+
+func TestRefreshTokenRotationWorksAfterRevocation(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-refresh-revoke")
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{"phone_e164": phone}, "")
+	verifyRec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify_code: %d: %s", verifyRec.Code, verifyRec.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	var tokens struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	json.NewDecoder(verifyRec.Body).Decode(&tokens)
+
+	// Revoke the device — bumps session_version
+	_ = doJSONRequest(t, router, http.MethodPost, "/v1/devices/"+deviceID+"/revoke", nil, tokens.AccessToken)
+
+	// Refresh uses refresh_token (not JWT) — should succeed and get new session_version
+	refreshRec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/refresh", map[string]any{
+		"refresh_token": tokens.RefreshToken,
+	}, "")
+	if refreshRec.Code != http.StatusOK {
+		t.Fatalf("refresh after revoke should work: %d: %s", refreshRec.Code, refreshRec.Body.String())
+	}
+
+	var newTokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	json.NewDecoder(refreshRec.Body).Decode(&newTokens)
+	if newTokens.AccessToken == "" {
+		t.Fatalf("expected new access_token after refresh")
+	}
+
+	// New token (with bumped session_version) should work
+	protected := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, newTokens.AccessToken)
+	if protected.Code != http.StatusOK {
+		t.Fatalf("new token after refresh+revoke should work: %d: %s", protected.Code, protected.Body.String())
+	}
+}
+
 // ── Test helpers ────────────────────────────────────────
 
 func openAPITestDB(t *testing.T) *sql.DB {
