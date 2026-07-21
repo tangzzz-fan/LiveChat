@@ -438,13 +438,18 @@ func handleVerifyCode(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http
 			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to create user"))
 			return
 		}
-		// Check if this is a new user by checking if a device exists
+		// Check if this device exists for this user
 		var existingVersion int
 		_ = db.QueryRowContext(ctx,
 			"SELECT session_version FROM devices WHERE id=$1 AND user_id=$2",
 			req.DeviceID, userID,
 		).Scan(&existingVersion)
 		isNewDevice := existingVersion == 0
+
+		// Handle device_id collision: if same device_id registered by different user
+		if isNewDevice {
+			db.ExecContext(ctx, "DELETE FROM devices WHERE id=$1 AND user_id != $2", req.DeviceID, userID)
+		}
 
 		// Begin transaction for device upsert + audit
 		tx, err := db.BeginTx(ctx, nil)

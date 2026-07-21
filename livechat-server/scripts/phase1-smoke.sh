@@ -66,16 +66,25 @@ grep -q "http_requests_total" <<<"$metrics_output" || {
   exit 1
 }
 
-echo "[5/10] register users"
-resp_a="$(curl -fsS -X POST "${BASE_URL}/v1/auth/register" \
+echo "[5/10] register users (new two-step auth)"
+resp_a="$(curl -fsS -X POST "${BASE_URL}/v1/auth/request_code" \
+  -H 'Content-Type: application/json' \
+  -d "{\"phone_e164\":\"${phone_a}\"}")"
+
+resp_a_v="$(curl -fsS -X POST "${BASE_URL}/v1/auth/verify_code" \
   -H 'Content-Type: application/json' \
   -d "{\"phone_e164\":\"${phone_a}\",\"verification_code\":\"123456\",\"device_id\":\"a-ios\",\"platform\":\"ios\"}")"
-resp_b="$(curl -fsS -X POST "${BASE_URL}/v1/auth/register" \
+
+resp_b="$(curl -fsS -X POST "${BASE_URL}/v1/auth/request_code" \
+  -H 'Content-Type: application/json' \
+  -d "{\"phone_e164\":\"${phone_b}\"}")"
+
+resp_b_v="$(curl -fsS -X POST "${BASE_URL}/v1/auth/verify_code" \
   -H 'Content-Type: application/json' \
   -d "{\"phone_e164\":\"${phone_b}\",\"verification_code\":\"123456\",\"device_id\":\"b-android\",\"platform\":\"android\"}")"
 
 read -r token_a uid_a <<EOF
-$(python3 - "$resp_a" <<'PY'
+$(python3 - "$resp_a_v" <<'PY'
 import json, sys
 data = json.loads(sys.argv[1])
 print(data["access_token"], data["user_id"])
@@ -84,7 +93,7 @@ PY
 EOF
 
 read -r token_b uid_b <<EOF
-$(python3 - "$resp_b" <<'PY'
+$(python3 - "$resp_b_v" <<'PY'
 import json, sys
 data = json.loads(sys.argv[1])
 print(data["access_token"], data["user_id"])
