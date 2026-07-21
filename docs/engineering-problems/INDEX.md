@@ -55,5 +55,7 @@
 | 08 | [设备吊销与会话版本号：为什么不能只靠 JWT 过期](08-session-version-device-revocation.md) | `security`, `consistency` | JWT 无状态 vs 有状态吊销的矛盾。Session Version 方案：JWT 携带 sv claim，DB 存当前版本，中间件对比，吊销时递增。含 3 种替代方案对比 + 3 条踩坑记录。 |
 | 09 | [两步认证的状态管理：验证码不能放在客户端回传](09-two-step-auth-code-storage.md) | `security`, `idempotency` | request_code → verify_code 两个独立 HTTP 请求之间，验证码必须存在服务端（Redis），决不能放在 JWT 里让客户端回传。含 Mock OTP 策略和频控设计。 |
 | 10 | [群消息写扩散：1 条消息 N 倍写入的代价与控制](10-group-fanout-write-amplification.md) | `fanout`, `scale`, `consistency` | 200 人群 1 条消息 → 199 倍写入放大。三级分层（小群全写扩散 / 中群混合 / 大群读扩散）+ 热点群 Redis Sorted Set 滑动窗口保护。含 WhatsApp vs Telegram 架构对比。 |
-| 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念：gRPC 投递、背压、分片、热点群聊、连接迁移、写扩散 vs 读扩散、Copy-on-Write、结构化日志、Clock Skew、幂等窗口。每个概念标注触发条件 + 学习目标 + 当前实现参考 + DDIA 章节映射。 |
-| 11 |
+| 11 | [推送不重复：在线投递与离线推送之间的重复消息问题](11-push-deduplication-coalescing.md) | `push`, `consistency`, `offline` | WebSocket 断开瞬间同时触发推送和重连，同一消息在两个通道各出现一次。推送 = 触发器而非消息载体 + sync 真相 + 客户端去重 + 30s 频控窗口合并。 |
+| 12 | [缓存三大坑：穿透、击穿、雪崩的场景与对策](12-cache-penetration-blast-avalanche.md) | `scale`, `observability` | 缓存穿透（NULL object 30s TTL）、击穿（SET NX 互斥锁 + double-check）、雪崩（TTL ±20% 随机抖动）。三层防护 + 监控命中率 + 降级路径。 |
+| 13 | [下载 URL 的签名安全：为什么不能直接暴露对象存储路径](13-download-url-hmac-signing.md) | `security`, `durability` | 媒体 URL 不能直接暴露存储路径——每次下载需校验会话成员资格。HMAC-SHA256 签名 URL + 过期时间 + `hmac.Equal` 常量时间比较。含 S3 Presigned URL vs 自签名对比。 |
+| 08 | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 10 个已识别但尚未在代码中落地的高并发概念。 |
