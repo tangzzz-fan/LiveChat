@@ -7,9 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -39,6 +42,10 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux.HandleFunc("POST /v1/auth/login", handleLogin(db, authSvc))
 	mux.HandleFunc("POST /v1/auth/refresh", handleRefreshToken(db, authSvc))
 
+	// New auth flow (Spec 03 two-step)
+	mux.HandleFunc("POST /v1/auth/request_code", handleRequestCode(rdb))
+	mux.HandleFunc("POST /v1/auth/verify_code", handleVerifyCode(db, rdb, authSvc))
+
 	// Health
 	mux.HandleFunc("GET /health", handleHealth(db, rdb))
 
@@ -46,9 +53,10 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux.Handle("GET /metrics", metrics.Handler())
 
 	// Device management
-	authMw := newAuthMiddleware(authSvc)
+	authMw := newAuthMiddleware(authSvc, db)
 	mux.Handle("GET /v1/devices", authMw.Wrap(http.HandlerFunc(handleListDevices(db))))
 	mux.Handle("POST /v1/devices/{did}/revoke", authMw.Wrap(http.HandlerFunc(handleRevokeDevice(db))))
+	mux.Handle("POST /v1/devices/push-token", authMw.Wrap(http.HandlerFunc(handleUpdatePushToken(db))))
 
 	// Core endpoints
 	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
@@ -69,10 +77,11 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 
 type authMiddleware struct {
 	svc *auth.Service
+	db  *sql.DB
 }
 
-func newAuthMiddleware(svc *auth.Service) *authMiddleware {
-	return &authMiddleware{svc: svc}
+func newAuthMiddleware(svc *auth.Service, db *sql.DB) *authMiddleware {
+	return &authMiddleware{svc: svc, db: db}
 }
 
 func (m *authMiddleware) Wrap(next http.Handler) http.Handler {
@@ -87,6 +96,21 @@ func (m *authMiddleware) Wrap(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, errorResponse("invalid or expired token"))
 			return
 		}
+
+		// Check session_version against DB to detect revoked devices
+		var dbVersion int
+		err = m.db.QueryRowContext(r.Context(),
+			"SELECT session_version FROM devices WHERE id=$1 AND user_id=$2",
+			claims.DeviceID, claims.UserID,
+		).Scan(&dbVersion)
+		if err != nil || int64(dbVersion) > claims.SessionVersion {
+			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"error":      "device has been revoked or session expired",
+				"error_code": "device_revoked",
+			})
+			return
+		}
+
 		ctx := WithUserID(r.Context(), claims.UserID)
 		ctx = WithDeviceID(ctx, claims.DeviceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -141,6 +165,8 @@ type authResponse struct {
 	UserID       int64  `json:"user_id"`
 }
 
+// Deprecated: use POST /v1/auth/request_code + POST /v1/auth/verify_code instead.
+// Kept for backward compatibility with Phase 1 clients and tests.
 func handleRegister(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req registerRequest
@@ -194,7 +220,7 @@ func handleRegister(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		accessToken, err := authSvc.SignAccessToken(userID, req.DeviceID)
+		accessToken, err := authSvc.SignAccessToken(userID, req.DeviceID, 1)
 		if err != nil {
 			slog.Error("sign access token", "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to sign token"))
@@ -210,6 +236,8 @@ func handleRegister(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 	}
 }
 
+// Deprecated: use POST /v1/auth/request_code + POST /v1/auth/verify_code instead.
+// Kept for backward compatibility with Phase 1 clients and tests.
 func handleLogin(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req registerRequest
@@ -258,7 +286,246 @@ func handleLogin(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		accessToken, err := authSvc.SignAccessToken(userID, req.DeviceID)
+		accessToken, err := authSvc.SignAccessToken(userID, req.DeviceID, 1)
+		if err != nil {
+			slog.Error("sign access token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to sign token"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, authResponse{
+			AccessToken:  accessToken,
+			RefreshToken: refreshRaw,
+			ExpiresIn:    3600,
+			UserID:       userID,
+		})
+	}
+}
+
+// ── New auth handlers ──────────────────────────────────
+
+var e164RE = regexp.MustCompile(`^\+[1-9]\d{6,14}$`)
+
+type requestCodeResponse struct {
+	RetryAfterSec int `json:"retry_after_sec"`
+	ExpiresInSec  int `json:"expires_in_sec"`
+}
+
+func handleRequestCode(rdb *redis.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			PhoneE164 string `json:"phone_e164"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		if !e164RE.MatchString(req.PhoneE164) {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid phone_e164 format"))
+			return
+		}
+
+		ctx := r.Context()
+
+		// Per-phone rate limit: 3/hour
+		phoneKey := "rate:phone:" + req.PhoneE164
+		phoneCount, err := rdb.Incr(ctx, phoneKey).Result()
+		if err != nil {
+			slog.Error("redis incr phone rate", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		if phoneCount == 1 {
+			rdb.Expire(ctx, phoneKey, time.Hour)
+		}
+		if phoneCount > 3 {
+			writeJSON(w, http.StatusTooManyRequests, errorResponse("too many code requests for this phone number, try again later"))
+			return
+		}
+
+		// Per-IP rate limit: 20/hour
+		ip := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = fwd
+		}
+		ipKey := "rate:ip:" + ip
+		ipCount, err := rdb.Incr(ctx, ipKey).Result()
+		if err != nil {
+			slog.Error("redis incr ip rate", "error", err)
+		}
+		if ipCount == 1 {
+			rdb.Expire(ctx, ipKey, time.Hour)
+		}
+		if ipCount > 20 {
+			writeJSON(w, http.StatusTooManyRequests, errorResponse("too many code requests from this IP, try again later"))
+			return
+		}
+
+		// Store mock verification code (always "123456")
+		codeKey := "code:" + req.PhoneE164
+		if err := rdb.Set(ctx, codeKey, "123456", 5*time.Minute).Err(); err != nil {
+			slog.Error("redis set code", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, requestCodeResponse{
+			RetryAfterSec: 30,
+			ExpiresInSec:  300,
+		})
+	}
+}
+
+type verifyCodeRequest struct {
+	PhoneE164        string `json:"phone_e164"`
+	VerificationCode string `json:"verification_code"`
+	DeviceID         string `json:"device_id"`
+	Platform         string `json:"platform"`
+}
+
+func handleVerifyCode(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req verifyCodeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		if !e164RE.MatchString(req.PhoneE164) {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid phone_e164 format"))
+			return
+		}
+		if len(req.VerificationCode) != 6 {
+			writeJSON(w, http.StatusBadRequest, errorResponse("verification_code must be 6 digits"))
+			return
+		}
+		if req.DeviceID == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("device_id is required"))
+			return
+		}
+
+		ctx := r.Context()
+
+		// Verify code from Redis
+		codeKey := "code:" + req.PhoneE164
+		storedCode, err := rdb.Get(ctx, codeKey).Result()
+		if err == redis.Nil {
+			writeJSON(w, http.StatusUnauthorized, errorResponse("verification code expired or not requested"))
+			return
+		}
+		if err != nil {
+			slog.Error("redis get code", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		// Mock: accept any 6-digit code (storedCode is always "123456")
+		_ = storedCode
+
+		// One-time use: delete the code
+		rdb.Del(ctx, codeKey)
+
+		// Upsert user
+		var userID int64
+		err = db.QueryRowContext(ctx,
+			`INSERT INTO users (phone_e164, display_name) VALUES ($1, $2)
+			 ON CONFLICT (phone_e164) DO UPDATE SET display_name = EXCLUDED.display_name
+			 RETURNING id`,
+			req.PhoneE164, req.PhoneE164,
+		).Scan(&userID)
+		if err != nil {
+			slog.Error("upsert user", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to create user"))
+			return
+		}
+		// Check if this is a new user by checking if a device exists
+		var existingVersion int
+		_ = db.QueryRowContext(ctx,
+			"SELECT session_version FROM devices WHERE id=$1 AND user_id=$2",
+			req.DeviceID, userID,
+		).Scan(&existingVersion)
+		isNewDevice := existingVersion == 0
+
+		// Begin transaction for device upsert + audit
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			slog.Error("begin tx", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+		defer tx.Rollback()
+
+		var sessionVersion int
+		if isNewDevice {
+			// New device: insert with session_version=1
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO devices (id, user_id, platform, session_version, last_seen_at)
+				 VALUES ($1, $2, $3, 1, NOW())`,
+				req.DeviceID, userID, req.Platform,
+			)
+			sessionVersion = 1
+		} else {
+			// Existing device: bump session_version
+			err = tx.QueryRowContext(ctx,
+				`UPDATE devices SET platform=$1, last_seen_at=NOW(), session_version=session_version+1
+				 WHERE id=$2 AND user_id=$3
+				 RETURNING session_version`,
+				req.Platform, req.DeviceID, userID,
+			).Scan(&sessionVersion)
+		}
+		if err != nil {
+			slog.Error("upsert device in verify_code", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to register device"))
+			return
+		}
+
+		// Generate refresh token and update hash
+		refreshRaw, refreshHash, err := auth.GenerateRefreshToken()
+		if err != nil {
+			slog.Error("generate refresh token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to generate token"))
+			return
+		}
+		_, err = tx.ExecContext(ctx,
+			"UPDATE devices SET refresh_token_hash=$1 WHERE id=$2 AND user_id=$3",
+			refreshHash, req.DeviceID, userID,
+		)
+		if err != nil {
+			slog.Error("update refresh token hash", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to update device"))
+			return
+		}
+
+		// Audit: login_success
+		ip := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = fwd
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO login_audit_events (user_id, device_id, event_type, ip_address, user_agent)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			userID, req.DeviceID, domain.EventTypeLoginSuccess, ip, r.UserAgent(),
+		)
+		if err != nil {
+			slog.Error("insert audit event", "error", err)
+			// Non-fatal
+		}
+
+		// Audit: device_added if new device
+		if isNewDevice {
+			tx.ExecContext(ctx,
+				`INSERT INTO login_audit_events (user_id, device_id, event_type, ip_address, user_agent)
+				 VALUES ($1, $2, $3, $4, $5)`,
+				userID, req.DeviceID, domain.EventTypeDeviceAdded, ip, r.UserAgent(),
+			)
+		}
+
+		if err := tx.Commit(); err != nil {
+			slog.Error("commit verify_code", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		// Sign access token with the current session_version
+		accessToken, err := authSvc.SignAccessToken(userID, req.DeviceID, sessionVersion)
 		if err != nil {
 			slog.Error("sign access token", "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse("failed to sign token"))
@@ -546,12 +813,40 @@ func handleRefreshToken(db *sql.DB, authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		// Issue new tokens (rotation)
-		accessToken, _ := authSvc.SignAccessToken(userID, deviceID)
+		// Issue new tokens (rotation) and bump session_version
+		var sessionVersion int
+		err = db.QueryRowContext(r.Context(),
+			`UPDATE devices SET refresh_token_hash=$1, session_version=session_version+1, last_seen_at=NOW()
+			 WHERE id=$2
+			 RETURNING session_version`,
+			"", deviceID, // placeholder — will update below
+		).Scan(&sessionVersion)
+		// Actually do a proper update:
 		newRaw, newHash, _ := auth.GenerateRefreshToken()
+		err = db.QueryRowContext(r.Context(),
+			`UPDATE devices SET refresh_token_hash=$1, session_version=session_version+1, last_seen_at=NOW()
+			 WHERE id=$2 AND user_id=$3
+			 RETURNING session_version`,
+			newHash, deviceID, userID,
+		).Scan(&sessionVersion)
+		if err != nil {
+			slog.Error("update refresh token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
 
+		accessToken, _ := authSvc.SignAccessToken(userID, deviceID, sessionVersion)
+
+		// Audit
+		ip := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = fwd
+		}
 		db.ExecContext(r.Context(),
-			"UPDATE devices SET refresh_token_hash=$1 WHERE id=$2", newHash, deviceID)
+			`INSERT INTO login_audit_events (user_id, device_id, event_type, ip_address, user_agent)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			userID, deviceID, domain.EventTypeTokenRefreshed, ip, r.UserAgent(),
+		)
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"access_token":  accessToken,
@@ -569,7 +864,7 @@ func handleListDevices(db *sql.DB) http.HandlerFunc {
 		deviceID := DeviceIDFromContext(r.Context())
 
 		rows, err := db.QueryContext(r.Context(),
-			"SELECT id, platform, last_seen_at FROM devices WHERE user_id=$1 ORDER BY last_seen_at DESC",
+			"SELECT id, platform, session_version, last_seen_at FROM devices WHERE user_id=$1 ORDER BY last_seen_at DESC",
 			userID)
 		if err != nil {
 			slog.Error("list devices", "error", err)
@@ -579,16 +874,17 @@ func handleListDevices(db *sql.DB) http.HandlerFunc {
 		defer rows.Close()
 
 		type deviceInfo struct {
-			DeviceID   string    `json:"device_id"`
-			Platform   string    `json:"platform"`
-			IsCurrent  bool      `json:"is_current"`
-			LastSeenAt time.Time `json:"last_seen_at"`
+			DeviceID       string    `json:"device_id"`
+			Platform       string    `json:"platform"`
+			SessionVersion int       `json:"session_version"`
+			IsCurrent      bool      `json:"is_current"`
+			LastSeenAt     time.Time `json:"last_seen_at"`
 		}
 		var devices []deviceInfo
 		for rows.Next() {
 			var d deviceInfo
 			var lastSeen time.Time
-			if err := rows.Scan(&d.DeviceID, &d.Platform, &lastSeen); err != nil {
+			if err := rows.Scan(&d.DeviceID, &d.Platform, &d.SessionVersion, &lastSeen); err != nil {
 				continue
 			}
 			d.LastSeenAt = lastSeen
@@ -607,8 +903,10 @@ func handleRevokeDevice(db *sql.DB) http.HandlerFunc {
 		userID := UserIDFromContext(r.Context())
 		did := r.PathValue("did")
 
+		// Increment session_version so the device's existing JWT becomes invalid
 		result, err := db.ExecContext(r.Context(),
-			"DELETE FROM devices WHERE id=$1 AND user_id=$2", did, userID)
+			"UPDATE devices SET session_version = session_version + 1 WHERE id=$1 AND user_id=$2",
+			did, userID)
 		if err != nil {
 			slog.Error("revoke device", "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
@@ -619,7 +917,58 @@ func handleRevokeDevice(db *sql.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusNotFound, errorResponse("device not found"))
 			return
 		}
+
+		// Audit
+		ip := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = fwd
+		}
+		db.ExecContext(r.Context(),
+			`INSERT INTO login_audit_events (user_id, device_id, event_type, ip_address, user_agent)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			userID, did, domain.EventTypeDeviceRevoked, ip, r.UserAgent(),
+		)
+
 		writeJSON(w, http.StatusOK, map[string]interface{}{"revoked": did})
+	}
+}
+
+func handleUpdatePushToken(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		deviceID := DeviceIDFromContext(r.Context())
+
+		var req struct {
+			PushToken string `json:"push_token"`
+			Platform  string `json:"platform"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		if req.PushToken == "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse("push_token is required"))
+			return
+		}
+
+		setClauses := []string{"push_token = $1", "last_seen_at = NOW()"}
+		args := []interface{}{req.PushToken}
+		if req.Platform != "" {
+			setClauses = append(setClauses, fmt.Sprintf("platform = $%d", len(args)+1))
+			args = append(args, req.Platform)
+		}
+		args = append(args, deviceID, userID)
+
+		query := fmt.Sprintf("UPDATE devices SET %s WHERE id = $%d AND user_id = $%d",
+			strings.Join(setClauses, ", "), len(args)-1, len(args))
+		_, err := db.ExecContext(r.Context(), query, args...)
+		if err != nil {
+			slog.Error("update push token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{"updated": true})
 	}
 }
 

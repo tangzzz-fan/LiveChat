@@ -53,7 +53,7 @@ func TestGatewayDeliversPublishedMessageToConnectedDevice(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestGatewayReplacesOldSessionWithoutDroppingNewRoute(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestGatewayHeartbeatRefreshesUserAndNodeRouteTTL(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestGatewayDisconnectRemovesSessionAndRoute(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -449,7 +449,7 @@ func TestGatewayWatchdogClosesStaleSessionWithReconnectHint(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}

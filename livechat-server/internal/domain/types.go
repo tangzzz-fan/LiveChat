@@ -17,6 +17,7 @@ type Device struct {
 	Platform         string    `json:"platform"`
 	PushToken        string    `json:"push_token,omitempty"`
 	RefreshTokenHash string    `json:"-"`
+	SessionVersion   int       `json:"session_version"`
 	LastSeenAt       time.Time `json:"last_seen_at"`
 	CreatedAt        time.Time `json:"created_at"`
 }
@@ -108,6 +109,18 @@ type SyncCursor struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// AuditEvent records a security-relevant event.
+type AuditEvent struct {
+	ID            int64     `json:"id"`
+	UserID        int64     `json:"user_id"`
+	DeviceID      string    `json:"device_id,omitempty"`
+	EventType     string    `json:"event_type"`
+	IPAddress     string    `json:"ip_address"`
+	UserAgent     string    `json:"user_agent"`
+	FailureReason string    `json:"failure_reason,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 // ── Event type constants ────────────────────────────
 
 const (
@@ -115,6 +128,16 @@ const (
 	EventTypeMessageDelivered    = "message_delivered"
 	EventTypeMessageRead         = "message_read"
 	EventTypeConversationUpdated = "conversation_updated"
+
+	// Audit event types
+	EventTypeLoginSuccess       = "login_success"
+	EventTypeLoginFailed        = "login_failed"
+	EventTypeCodeRequest        = "code_request"
+	EventTypeDeviceAdded        = "device_added"
+	EventTypeDeviceRevoked      = "device_revoked"
+	EventTypeTokenRefreshed     = "token_refreshed"
+	EventTypeTokenReplayDetected = "token_replay_detected"
+	EventTypeSecurityAlert      = "security_alert"
 )
 
 // ── Outbox aggregate types ──────────────────────────

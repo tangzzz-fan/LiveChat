@@ -17,8 +17,9 @@ var (
 )
 
 type Claims struct {
-	UserID   int64  `json:"user_id"`
-	DeviceID string `json:"device_id"`
+	UserID         int64  `json:"user_id"`
+	DeviceID       string `json:"device_id"`
+	SessionVersion int64  `json:"sv"`
 	jwt.RegisteredClaims
 }
 
@@ -37,11 +38,12 @@ func NewService(jwtSecret string, accessTokenTTL, refreshTokenTTL time.Duration)
 }
 
 // SignAccessToken creates a JWT access token for the given user and device.
-func (s *Service) SignAccessToken(userID int64, deviceID string) (string, error) {
+func (s *Service) SignAccessToken(userID int64, deviceID string, sessionVersion int) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		UserID:   userID,
-		DeviceID: deviceID,
+		UserID:         userID,
+		DeviceID:       deviceID,
+		SessionVersion: int64(sessionVersion),
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTokenTTL)),

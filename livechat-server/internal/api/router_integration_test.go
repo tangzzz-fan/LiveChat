@@ -64,7 +64,8 @@ func TestSendMessageEndpointPersistsOutboxDeduplicatesAndAdvancesSeq(t *testing.
 	})
 	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB}) })
 
-	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	seedAPIDevice(t, db, userA, "ios-a", "ios")
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userA: %v", err)
 	}
@@ -123,11 +124,13 @@ func TestSendMessageEndpointScopesClientMessageIDPerUser(t *testing.T) {
 	})
 	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB}) })
 
-	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	seedAPIDevice(t, db, userA, "ios-a", "ios")
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userA: %v", err)
 	}
-	tokenB, err := authSvc.SignAccessToken(userB, "ios-b")
+	seedAPIDevice(t, db, userB, "ios-b", "ios")
+	tokenB, err := authSvc.SignAccessToken(userB, "ios-b", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userB: %v", err)
 	}
@@ -166,11 +169,13 @@ func TestSendMessageEndpointRejectsUnauthorizedBadRequestAndNonMember(t *testing
 	ensureAPIUsers(t, db, []apiUserSeed{{userID: userC, displayName: "C"}})
 	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB, userC}) })
 
-	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	seedAPIDevice(t, db, userA, "ios-a", "ios")
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userA: %v", err)
 	}
-	tokenC, err := authSvc.SignAccessToken(userC, "ios-c")
+	seedAPIDevice(t, db, userC, "ios-c", "ios")
+	tokenC, err := authSvc.SignAccessToken(userC, "ios-c", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userC: %v", err)
 	}
@@ -302,9 +307,10 @@ func TestGetSyncEventsEndpointReturnsEventsLatestSeqAndUpdatesCursor(t *testing.
 	const deviceID = "ios-sync-http"
 	userID := uniqueUserID(t, 31)
 	ensureAPIUsers(t, db, []apiUserSeed{{userID: userID, displayName: "sync-user"}})
+	seedAPIDevice(t, db, userID, deviceID, "ios")
 	t.Cleanup(func() { cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID}) })
 
-	token, err := authSvc.SignAccessToken(userID, deviceID)
+	token, err := authSvc.SignAccessToken(userID, deviceID, 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -357,9 +363,10 @@ func TestGetSyncEventsEndpointPaginatesAndCursorOnlyMovesForward(t *testing.T) {
 	const deviceID = "ios-sync-paging"
 	userID := uniqueUserID(t, 41)
 	ensureAPIUsers(t, db, []apiUserSeed{{userID: userID, displayName: "sync-user"}})
+	seedAPIDevice(t, db, userID, deviceID, "ios")
 	t.Cleanup(func() { cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID}) })
 
-	token, err := authSvc.SignAccessToken(userID, deviceID)
+	token, err := authSvc.SignAccessToken(userID, deviceID, 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -436,9 +443,10 @@ func TestGetSyncEventsEndpointSupports150EventPagination(t *testing.T) {
 	const deviceID = "ios-sync-150"
 	userID := uniqueUserID(t, 43)
 	ensureAPIUsers(t, db, []apiUserSeed{{userID: userID, displayName: "sync-user"}})
+	seedAPIDevice(t, db, userID, deviceID, "ios")
 	t.Cleanup(func() { cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID}) })
 
-	token, err := authSvc.SignAccessToken(userID, deviceID)
+	token, err := authSvc.SignAccessToken(userID, deviceID, 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -508,7 +516,8 @@ func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
 	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB}) })
 	seedConversationMessages(t, db, convID, userA, "ios-a", []int64{1, 2, 3})
 
-	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	seedAPIDevice(t, db, userA, "ios-a", "ios")
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -551,11 +560,13 @@ func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
 	ensureAPIUsers(t, db, []apiUserSeed{{userID: userC, displayName: "C"}})
 	t.Cleanup(func() { cleanupAPIConversation(t, db, convID, []int64{userA, userB, userC}) })
 
-	tokenA, err := authSvc.SignAccessToken(userA, "ios-a")
+	seedAPIDevice(t, db, userA, "ios-a", "ios")
+	tokenA, err := authSvc.SignAccessToken(userA, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userA: %v", err)
 	}
-	tokenC, err := authSvc.SignAccessToken(userC, "ios-c")
+	seedAPIDevice(t, db, userC, "ios-c", "ios")
+	tokenC, err := authSvc.SignAccessToken(userC, "ios-c", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken userC: %v", err)
 	}
@@ -570,6 +581,320 @@ func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
 		t.Fatalf("expected non-member messages pull 403, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// ── New 0011 tests ─────────────────────────────────────
+
+func TestRequestCodeReturnsRetryAfterAndExpiresIn(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+
+	rec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{
+		"phone_e164": phone,
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected request_code 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		RetryAfterSec int `json:"retry_after_sec"`
+		ExpiresInSec  int `json:"expires_in_sec"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode request_code response: %v", err)
+	}
+	if resp.RetryAfterSec != 30 {
+		t.Fatalf("expected retry_after_sec=30, got %d", resp.RetryAfterSec)
+	}
+	if resp.ExpiresInSec != 300 {
+		t.Fatalf("expected expires_in_sec=300, got %d", resp.ExpiresInSec)
+	}
+}
+
+func TestRequestCodeRejectsInvalidE164Format(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	invalidPhones := []string{
+		"15551234567", // no leading +
+		"+123",        // too short (<7 digits)
+		"+",           // just +
+		"not-a-phone",
+	}
+	for _, phone := range invalidPhones {
+		rec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{
+			"phone_e164": phone,
+		}, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected phone %q to get 400, got %d: %s", phone, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestVerifyCodeCreatesNewUserAndReturnsTokens(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-vc")
+
+	// Step 1: Request code
+	rec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{"phone_e164": phone}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request_code: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Step 2: Verify code
+	rec = doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify_code: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		UserID       int64  `json:"user_id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode verify_code: %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Fatalf("expected access_token")
+	}
+	if resp.RefreshToken == "" {
+		t.Fatalf("expected refresh_token")
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	// Token should work for protected endpoints
+	protected := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, resp.AccessToken)
+	if protected.Code != http.StatusOK {
+		t.Fatalf("expected devices 200 with new token, got %d: %s", protected.Code, protected.Body.String())
+	}
+}
+
+func TestVerifyCodeRejectsExpiredOrMissingCode(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-vc-exp")
+
+	// Verify without requesting code first
+	rec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected verify without code 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeviceRevocationRejectsFutureRequests(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-revoke")
+
+	// Register via new flow
+	doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{"phone_e164": phone}, "")
+	verifyRec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify_code: %d: %s", verifyRec.Code, verifyRec.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	var tokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	json.NewDecoder(verifyRec.Body).Decode(&tokens)
+
+	// Revoke the device
+	revokeRec := doJSONRequest(t, router, http.MethodPost, "/v1/devices/"+deviceID+"/revoke", nil, tokens.AccessToken)
+	if revokeRec.Code != http.StatusOK {
+		t.Fatalf("revoke: %d: %s", revokeRec.Code, revokeRec.Body.String())
+	}
+
+	// Same token should now be rejected
+	protected := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, tokens.AccessToken)
+	if protected.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 after revoke, got %d: %s", protected.Code, protected.Body.String())
+	}
+}
+
+func TestPushTokenBindingAndUpdate(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-push")
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{"phone_e164": phone}, "")
+	verifyRec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify_code: %d: %s", verifyRec.Code, verifyRec.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	var tokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	json.NewDecoder(verifyRec.Body).Decode(&tokens)
+
+	// Bind push token
+	pushRec := doJSONRequest(t, router, http.MethodPost, "/v1/devices/push-token", map[string]any{
+		"push_token": "apns-token-abc123",
+		"platform":   "ios",
+	}, tokens.AccessToken)
+	if pushRec.Code != http.StatusOK {
+		t.Fatalf("push-token: %d: %s", pushRec.Code, pushRec.Body.String())
+	}
+
+	// Verify in DB
+	var pushToken string
+	db.QueryRowContext(context.Background(),
+		"SELECT push_token FROM devices WHERE id=$1 AND user_id=$2", deviceID, userID,
+	).Scan(&pushToken)
+	if pushToken != "apns-token-abc123" {
+		t.Fatalf("expected push_token 'apns-token-abc123', got %q", pushToken)
+	}
+}
+
+func TestListDevicesIncludesSessionVersion(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-sv")
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/auth/request_code", map[string]any{"phone_e164": phone}, "")
+	verifyRec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/verify_code", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify_code: %d: %s", verifyRec.Code, verifyRec.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	var tokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	json.NewDecoder(verifyRec.Body).Decode(&tokens)
+
+	rec := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, tokens.AccessToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("devices: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Devices []struct {
+			DeviceID       string `json:"device_id"`
+			SessionVersion int    `json:"session_version"`
+			IsCurrent      bool   `json:"is_current"`
+		} `json:"devices"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode devices: %v", err)
+	}
+	for _, d := range resp.Devices {
+		if d.DeviceID == deviceID {
+			if d.SessionVersion != 1 {
+				t.Fatalf("expected session_version=1, got %d", d.SessionVersion)
+			}
+			if !d.IsCurrent {
+				t.Fatalf("expected is_current=true")
+			}
+			return
+		}
+	}
+	t.Fatalf("device %s not found in list", deviceID)
+}
+
+func TestOldRegisterStillWorks(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	phone := uniquePhone(t)
+	deviceID := uniqueDeviceID(t, "ios-old-reg")
+
+	rec := doJSONRequest(t, router, http.MethodPost, "/v1/auth/register", map[string]any{
+		"phone_e164":        phone,
+		"verification_code": "123456",
+		"device_id":         deviceID,
+		"platform":          "ios",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected old register 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	userID := userIDByPhone(t, db, phone)
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userID}, []string{deviceID})
+	})
+
+	var resp struct {
+		AccessToken string `json:"access_token"`
+		UserID      int64  `json:"user_id"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.AccessToken == "" || resp.UserID != userID {
+		t.Fatalf("old register response: %+v", resp)
+	}
+
+	// Token should still work
+	protected := doJSONRequest(t, router, http.MethodGet, "/v1/devices", nil, resp.AccessToken)
+	if protected.Code != http.StatusOK {
+		t.Fatalf("old register token rejected: %d: %s", protected.Code, protected.Body.String())
+	}
+}
+
+// ── Test helpers ────────────────────────────────────────
 
 func openAPITestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -643,6 +968,16 @@ func doJSONRequest(t *testing.T, handler http.Handler, method, path string, body
 	return rec
 }
 
+func seedAPIDevice(t *testing.T, db *sql.DB, userID int64, deviceID, platform string) {
+	t.Helper()
+	mustExecAPI(t, db,
+		`INSERT INTO devices (id, user_id, platform, session_version, last_seen_at)
+		 VALUES ($1, $2, $3, 1, NOW())
+		 ON CONFLICT (id) DO NOTHING`,
+		deviceID, userID, platform,
+	)
+}
+
 func seedAPIDirectConversation(t *testing.T, db *sql.DB, conversationID string, users []apiUserSeed) {
 	t.Helper()
 	ensureAPIUsers(t, db, users)
@@ -686,6 +1021,7 @@ func cleanupAPIUsers(t *testing.T, db *sql.DB, userIDs []int64, deviceIDs []stri
 	if len(userIDs) == 0 {
 		return
 	}
+	mustExecAPI(t, db, `DELETE FROM login_audit_events WHERE user_id = ANY($1)`, pqInt64Array(userIDs))
 	mustExecAPI(t, db, `DELETE FROM conversation_summaries WHERE user_id = ANY($1)`, pqInt64Array(userIDs))
 	mustExecAPI(t, db, `DELETE FROM sync_cursors WHERE user_id = ANY($1)`, pqInt64Array(userIDs))
 	mustExecAPI(t, db, `DELETE FROM sync_events WHERE user_id = ANY($1)`, pqInt64Array(userIDs))

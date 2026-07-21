@@ -53,7 +53,7 @@ func TestGatewayForwardsReadAckToMessageService(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	accessToken, err := authSvc.SignAccessToken(101, "ios-a")
+	accessToken, err := authSvc.SignAccessToken(101, "ios-a", 1)
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
