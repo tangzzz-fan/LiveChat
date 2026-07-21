@@ -72,7 +72,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux.Handle("POST /v1/groups/{gid}/leave", authMw.Wrap(http.HandlerFunc(handleLeaveGroup(groupSvc))))
 	mux.Handle("GET /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleListGroupMembers(groupSvc))))
 
-	return withLogging(mux)
+	return withLogging(securityHeaders(mux))
 }
 
 // ── Auth middleware ──────────────────────────────────
@@ -1129,4 +1129,15 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// ── Security middleware ─────────────────────────────
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
 }
