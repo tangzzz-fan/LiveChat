@@ -582,6 +582,321 @@ func TestGetConversationMessagesRejectsNonMemberAndBadCursor(t *testing.T) {
 	}
 }
 
+// ── Group membership tests ─────────────────────────────
+
+func TestCreateGroupAtomicallyCreatesConversationAndOwner(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	userA := uniqueUserID(t, 71)
+	deviceA := uniqueDeviceID(t, "ios-group")
+	ensureAPIUsers(t, db, []apiUserSeed{{userID: userA, displayName: "Group Creator"}})
+	seedAPIDevice(t, db, userA, deviceA, "ios")
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userA}, []string{deviceA})
+	})
+
+	tokenA, err := authSvc.SignAccessToken(userA, deviceA, 1)
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	rec := doJSONRequest(t, router, http.MethodPost, "/v1/groups", map[string]any{
+		"name":        "Test Group",
+		"description": "A test group",
+	}, tokenA)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected create group 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Group          map[string]any `json:"group"`
+		ConversationID string         `json:"conversation_id"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.Group["id"] == "" {
+		t.Fatalf("expected group id")
+	}
+	if resp.ConversationID == "" {
+		t.Fatalf("expected conversation_id")
+	}
+
+	// Verify 3-way consistency
+	groupID := resp.Group["id"].(string)
+	convID := resp.ConversationID
+
+	// groups table
+	var currentMembers int
+	db.QueryRowContext(context.Background(),
+		"SELECT current_members FROM groups WHERE id=$1", groupID).Scan(&currentMembers)
+	if currentMembers != 1 {
+		t.Fatalf("expected 1 member in groups.current_members, got %d", currentMembers)
+	}
+
+	// group_members table
+	var role string
+	db.QueryRowContext(context.Background(),
+		"SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL",
+		groupID, userA).Scan(&role)
+	if role != "owner" {
+		t.Fatalf("expected owner role, got %s", role)
+	}
+
+	// conversation exists
+	var convType string
+	db.QueryRowContext(context.Background(),
+		"SELECT type FROM conversations WHERE id=$1", convID).Scan(&convType)
+	if convType != "group" {
+		t.Fatalf("expected conversation type 'group', got %s", convType)
+	}
+
+	// conversation_members
+	var memberExists bool
+	db.QueryRowContext(context.Background(),
+		"SELECT EXISTS(SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2)",
+		convID, userA).Scan(&memberExists)
+	if !memberExists {
+		t.Fatalf("expected creator to be in conversation_members")
+	}
+
+	// group_events
+	var eventCount int
+	db.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM group_events WHERE group_id=$1 AND event_type='created'",
+		groupID).Scan(&eventCount)
+	if eventCount != 1 {
+		t.Fatalf("expected 1 'created' group_event, got %d", eventCount)
+	}
+
+	// conversation_summary initialized
+	var summaryExists bool
+	db.QueryRowContext(context.Background(),
+		"SELECT EXISTS(SELECT 1 FROM conversation_summaries WHERE user_id=$1 AND conversation_id=$2)",
+		userA, convID).Scan(&summaryExists)
+	if !summaryExists {
+		t.Fatalf("expected conversation_summary for creator")
+	}
+
+	// Cleanup group data
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM group_events WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM conversation_summaries WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversation_members WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversations WHERE id=$1", convID)
+		db.Exec("DELETE FROM group_members WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM groups WHERE id=$1", groupID)
+	})
+}
+
+func TestAddMembersUpdatesGroupAndEmitsEvents(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	userA := uniqueUserID(t, 81)
+	userB := uniqueUserID(t, 82)
+	userC := uniqueUserID(t, 83)
+	deviceA := uniqueDeviceID(t, "ios-addr-a")
+	ensureAPIUsers(t, db, []apiUserSeed{
+		{userID: userA, displayName: "Admin"},
+		{userID: userB, displayName: "Member B"},
+		{userID: userC, displayName: "Member C"},
+	})
+	seedAPIDevice(t, db, userA, deviceA, "ios")
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userA, userB, userC}, []string{deviceA})
+	})
+
+	tokenA, _ := authSvc.SignAccessToken(userA, deviceA, 1)
+
+	// Create group
+	createRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups", map[string]any{
+		"name": "Add Members Test",
+	}, tokenA)
+	var createResp struct {
+		Group          map[string]any `json:"group"`
+		ConversationID string         `json:"conversation_id"`
+	}
+	json.NewDecoder(createRec.Body).Decode(&createResp)
+	groupID := createResp.Group["id"].(string)
+	convID := createResp.ConversationID
+
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM group_events WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM conversation_summaries WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversation_members WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversations WHERE id=$1", convID)
+		db.Exec("DELETE FROM group_members WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM groups WHERE id=$1", groupID)
+	})
+
+	// Add members B + C
+	addRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups/"+groupID+"/members", map[string]any{
+		"user_ids": []int64{userB, userC},
+	}, tokenA)
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("expected add members 200, got %d: %s", addRec.Code, addRec.Body.String())
+	}
+
+	// Verify count
+	var currentMembers int
+	db.QueryRowContext(context.Background(),
+		"SELECT current_members FROM groups WHERE id=$1", groupID).Scan(&currentMembers)
+	if currentMembers != 3 {
+		t.Fatalf("expected 3 members, got %d", currentMembers)
+	}
+
+	// Verify B and C have conversation_summary
+	for _, uid := range []int64{userB, userC} {
+		var ok bool
+		db.QueryRowContext(context.Background(),
+			"SELECT EXISTS(SELECT 1 FROM conversation_summaries WHERE user_id=$1 AND conversation_id=$2)",
+			uid, convID).Scan(&ok)
+		if !ok {
+			t.Fatalf("expected conversation_summary for user %d", uid)
+		}
+	}
+
+	// Verify group_events
+	var joinEvents int
+	db.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM group_events WHERE group_id=$1 AND event_type='member_joined'",
+		groupID).Scan(&joinEvents)
+	if joinEvents != 2 {
+		t.Fatalf("expected 2 member_joined events, got %d", joinEvents)
+	}
+}
+
+func TestLeaveGroupHidesConversationAndPreventsMessages(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	userA := uniqueUserID(t, 91)
+	userB := uniqueUserID(t, 92)
+	deviceA := "ios-leave-a"
+	deviceB := "ios-leave-b"
+	ensureAPIUsers(t, db, []apiUserSeed{
+		{userID: userA, displayName: "Owner"},
+		{userID: userB, displayName: "Leaver"},
+	})
+	seedAPIDevice(t, db, userA, deviceA, "ios")
+	seedAPIDevice(t, db, userB, deviceB, "ios")
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userA, userB}, []string{deviceA, deviceB})
+	})
+
+	tokenA, _ := authSvc.SignAccessToken(userA, deviceA, 1)
+	tokenB, _ := authSvc.SignAccessToken(userB, deviceB, 1)
+
+	// Create group + add B
+	createRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups", map[string]any{"name": "Leave Test"}, tokenA)
+	var createResp struct {
+		Group          map[string]any `json:"group"`
+		ConversationID string         `json:"conversation_id"`
+	}
+	json.NewDecoder(createRec.Body).Decode(&createResp)
+	groupID := createResp.Group["id"].(string)
+	convID := createResp.ConversationID
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/groups/"+groupID+"/members", map[string]any{
+		"user_ids": []int64{userB},
+	}, tokenA)
+
+	// B leaves the group
+	leaveRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups/"+groupID+"/leave", nil, tokenB)
+	if leaveRec.Code != http.StatusOK {
+		t.Fatalf("expected leave 200, got %d: %s", leaveRec.Code, leaveRec.Body.String())
+	}
+
+	// Verify is_hidden for B
+	var isHidden bool
+	db.QueryRowContext(context.Background(),
+		"SELECT is_hidden FROM conversation_summaries WHERE user_id=$1 AND conversation_id=$2",
+		userB, convID).Scan(&isHidden)
+	if !isHidden {
+		t.Fatalf("expected is_hidden=true for leaver")
+	}
+
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM group_events WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM conversation_summaries WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversation_members WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversations WHERE id=$1", convID)
+		db.Exec("DELETE FROM group_members WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM groups WHERE id=$1", groupID)
+	})
+}
+
+func TestRemoveMemberRequiresAdminAndCannotRemoveOwner(t *testing.T) {
+	db := openAPITestDB(t)
+	authSvc := auth.NewService("test-secret", time.Hour, 24*time.Hour)
+	router := NewRouter(db, redis.NewClient(&redis.Options{Addr: "localhost:6379"}), authSvc)
+
+	userA := uniqueUserID(t, 101)
+	userB := uniqueUserID(t, 102)
+	userC := uniqueUserID(t, 103)
+	deviceA := "ios-remove-a"
+	deviceB := "ios-remove-b"
+	deviceC := "ios-remove-c"
+	ensureAPIUsers(t, db, []apiUserSeed{
+		{userID: userA, displayName: "Owner"},
+		{userID: userB, displayName: "Regular"},
+		{userID: userC, displayName: "AlsoRegular"},
+	})
+	seedAPIDevice(t, db, userA, deviceA, "ios")
+	seedAPIDevice(t, db, userB, deviceB, "ios")
+	seedAPIDevice(t, db, userC, deviceC, "ios")
+	t.Cleanup(func() {
+		cleanupAPIUsers(t, db, []int64{userA, userB, userC}, []string{deviceA, deviceB, deviceC})
+	})
+
+	tokenA, _ := authSvc.SignAccessToken(userA, deviceA, 1)
+	tokenB, _ := authSvc.SignAccessToken(userB, deviceB, 1)
+
+	// Create group + add B and C
+	createRec := doJSONRequest(t, router, http.MethodPost, "/v1/groups", map[string]any{"name": "Remove Test"}, tokenA)
+	var createResp struct {
+		Group          map[string]any `json:"group"`
+		ConversationID string         `json:"conversation_id"`
+	}
+	json.NewDecoder(createRec.Body).Decode(&createResp)
+	groupID := createResp.Group["id"].(string)
+	convID := createResp.ConversationID
+
+	doJSONRequest(t, router, http.MethodPost, "/v1/groups/"+groupID+"/members", map[string]any{
+		"user_ids": []int64{userB, userC},
+	}, tokenA)
+
+	// Regular member B tries to remove C — should fail
+	rec := doJSONRequest(t, router, http.MethodDelete, "/v1/groups/"+groupID+"/members/"+fmt.Sprintf("%d", userC), nil, tokenB)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected non-admin removal 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Owner A tries to remove self (owner) — should fail
+	rec = doJSONRequest(t, router, http.MethodDelete, "/v1/groups/"+groupID+"/members/"+fmt.Sprintf("%d", userA), nil, tokenA)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected remove owner 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Owner A removes C — should succeed
+	rec = doJSONRequest(t, router, http.MethodDelete, "/v1/groups/"+groupID+"/members/"+fmt.Sprintf("%d", userC), nil, tokenA)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected remove C 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM group_events WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM conversation_summaries WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversation_members WHERE conversation_id=$1", convID)
+		db.Exec("DELETE FROM conversations WHERE id=$1", convID)
+		db.Exec("DELETE FROM group_members WHERE group_id=$1", groupID)
+		db.Exec("DELETE FROM groups WHERE id=$1", groupID)
+	})
+}
+
 // ── New 0011 tests ─────────────────────────────────────
 
 func TestRequestCodeReturnsRetryAfterAndExpiresIn(t *testing.T) {

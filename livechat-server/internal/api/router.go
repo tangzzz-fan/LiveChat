@@ -35,6 +35,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	syncSvc := sync.NewService(db)
 	convSvc := conversations.NewService(db)
 	groupSvc := group.NewService(db)
+	groupSvc.SetSyncWriter(syncSvc)
 	msgSvc.SetConversationUpdater(convSvc)
 
 	// Auth endpoints (public)
@@ -68,6 +69,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service) http.Handle
 	mux.Handle("POST /v1/groups", authMw.Wrap(http.HandlerFunc(handleCreateGroup(groupSvc))))
 	mux.Handle("POST /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleAddGroupMembers(groupSvc))))
 	mux.Handle("DELETE /v1/groups/{gid}/members/{uid}", authMw.Wrap(http.HandlerFunc(handleRemoveGroupMember(groupSvc))))
+	mux.Handle("POST /v1/groups/{gid}/leave", authMw.Wrap(http.HandlerFunc(handleLeaveGroup(groupSvc))))
 	mux.Handle("GET /v1/groups/{gid}/members", authMw.Wrap(http.HandlerFunc(handleListGroupMembers(groupSvc))))
 
 	return withLogging(mux)
@@ -1069,6 +1071,27 @@ func handleListGroupMembers(svc *group.Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"members": members})
+	}
+}
+
+func handleLeaveGroup(svc *group.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := UserIDFromContext(r.Context())
+		gid := r.PathValue("gid")
+
+		if err := svc.LeaveGroup(r.Context(), gid, userID); err != nil {
+			switch {
+			case errors.Is(err, group.ErrNotMember):
+				writeJSON(w, http.StatusNotFound, errorResponse("not a member of this group"))
+			case errors.Is(err, group.ErrCannotRemoveSelf):
+				writeJSON(w, http.StatusConflict, errorResponse("owner cannot leave; transfer ownership first"))
+			default:
+				slog.Error("leave group", "error", err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse("failed to leave group"))
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"left": gid})
 	}
 }
 

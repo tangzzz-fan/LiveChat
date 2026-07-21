@@ -8,13 +8,32 @@ import (
 	"time"
 )
 
+// SyncWriter is the interface for appending sync events to a user's stream.
+type SyncWriter interface {
+	AppendEventWithConv(ctx context.Context, userID int64, conversationID, eventType string, payload []byte) error
+}
+
 // Service handles group CRUD and member management.
 type Service struct {
-	db *sql.DB
+	db        *sql.DB
+	sync      SyncWriter
+	convIDFn  func(groupID string) string // defaults to GetConversationID
 }
 
 func NewService(db *sql.DB) *Service {
-	return &Service{db: db}
+	s := &Service{db: db}
+	s.convIDFn = s.GetConversationID
+	return s
+}
+
+// SetSyncWriter optionally enables sync-event projection for group membership changes.
+func (s *Service) SetSyncWriter(sync SyncWriter) {
+	s.sync = sync
+}
+
+// SetConversationIDFn overrides the default conv_<groupID> prefix.
+func (s *Service) SetConversationIDFn(fn func(groupID string) string) {
+	s.convIDFn = fn
 }
 
 // ── Types ──────────────────────────────────────────
@@ -51,6 +70,7 @@ var (
 	ErrGroupFull         = errors.New("group is full")
 	ErrAlreadyMember     = errors.New("user is already a member")
 	ErrCannotRemoveOwner = errors.New("cannot remove the group owner")
+	ErrCannotRemoveSelf  = errors.New("owner cannot leave the group; transfer ownership first")
 )
 
 // ── Group CRUD ─────────────────────────────────────
@@ -59,7 +79,7 @@ var (
 // It also creates the corresponding conversation and conversation_members entries.
 func (s *Service) CreateGroup(ctx context.Context, name, description string, creatorUserID int64) (*Group, error) {
 	groupID := fmt.Sprintf("grp_%d_%d", creatorUserID, time.Now().UnixNano()/1000000)
-	convID := fmt.Sprintf("conv_%s", groupID)
+	convID := s.convIDFn(groupID)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -104,9 +124,26 @@ func (s *Service) CreateGroup(ctx context.Context, name, description string, cre
 		return nil, fmt.Errorf("insert conv member: %w", err)
 	}
 
+	// Record group event
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO group_events (group_id, event_type, actor_user_id, created_at)
+		 VALUES ($1, 'created', $2, NOW())`,
+		groupID, creatorUserID)
+	if err != nil {
+		return nil, fmt.Errorf("insert group event: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
+
+	// Init conversation_summary for the creator (so the group appears in their list)
+	_, _ = s.db.ExecContext(ctx,
+		`INSERT INTO conversation_summaries (user_id, conversation_id, last_message_preview, last_message_at, unread_count, updated_at)
+		 VALUES ($1, $2, '', NOW(), 0, NOW())
+		 ON CONFLICT (user_id, conversation_id) DO NOTHING`,
+		creatorUserID, convID,
+	)
 
 	return &g, nil
 }
@@ -147,7 +184,7 @@ func (s *Service) AddMembers(ctx context.Context, groupID string, addedBy int64,
 		return ErrGroupFull
 	}
 
-	convID := fmt.Sprintf("conv_%s", groupID)
+	convID := s.convIDFn(groupID)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -155,6 +192,7 @@ func (s *Service) AddMembers(ctx context.Context, groupID string, addedBy int64,
 	}
 	defer tx.Rollback()
 
+	addedCount := 0
 	for _, uid := range userIDs {
 		// Check not already a member
 		var exists bool
@@ -162,67 +200,102 @@ func (s *Service) AddMembers(ctx context.Context, groupID string, addedBy int64,
 			`SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL)`,
 			groupID, uid).Scan(&exists)
 		if exists {
-			tx.Rollback()
-			return fmt.Errorf("%w: user %d", ErrAlreadyMember, uid)
+			continue // skip already-active members (idempotent)
 		}
 
-		// Add to group_members
-		_, err = tx.ExecContext(ctx,
-			`INSERT INTO group_members (group_id, user_id, role, joined_at, added_by)
-			 VALUES ($1, $2, 'member', NOW(), $3)`,
-			groupID, uid, addedBy)
+		// Check if previously left — if so, re-activate
+		var previouslyLeft bool
+		tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NOT NULL)`,
+			groupID, uid).Scan(&previouslyLeft)
+
+		if previouslyLeft {
+			_, err = tx.ExecContext(ctx,
+				`UPDATE group_members SET role='member', left_at=NULL, joined_at=NOW(), added_by=$1
+				 WHERE group_id=$2 AND user_id=$3`,
+				addedBy, groupID, uid)
+		} else {
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO group_members (group_id, user_id, role, joined_at, added_by)
+				 VALUES ($1, $2, 'member', NOW(), $3)`,
+				groupID, uid, addedBy)
+		}
 		if err != nil {
 			tx.Rollback()
-			return err
+			return fmt.Errorf("add member %d: %w", uid, err)
 		}
 
 		// Add to conversation_members
 		_, err = tx.ExecContext(ctx,
 			`INSERT INTO conversation_members (conversation_id, user_id, joined_at)
-			 VALUES ($1, $2, NOW())`,
+			 VALUES ($1, $2, NOW())
+			 ON CONFLICT (conversation_id, user_id) DO NOTHING`,
 			convID, uid)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return fmt.Errorf("add conv member %d: %w", uid, err)
 		}
+
+		// Record group event
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO group_events (group_id, event_type, actor_user_id, target_user_id, created_at)
+			 VALUES ($1, 'member_joined', $2, $3, NOW())`,
+			groupID, addedBy, uid,
+		)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("insert group event: %w", err)
+		}
+
+		addedCount++
+	}
+
+	if addedCount == 0 {
+		tx.Rollback()
+		return ErrAlreadyMember
 	}
 
 	// Update member count
 	_, err = tx.ExecContext(ctx,
 		`UPDATE groups SET current_members = current_members + $1, updated_at = NOW()
-		 WHERE id=$2`, len(userIDs), groupID)
+		 WHERE id=$2`, addedCount, groupID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// After commit: create conversation_summary for new members and sync-events
+	for _, uid := range userIDs {
+		s.ensureSummary(ctx, uid, convID)
+		s.emitMembershipEvent(ctx, uid, convID, "member_joined", groupID, addedBy, uid)
+	}
+	// Also emit to the adder
+	s.emitMembershipEvent(ctx, addedBy, convID, "member_joined", groupID, addedBy, userIDs...)
+
+	return nil
 }
 
 // RemoveMember removes a user from a group.
 func (s *Service) RemoveMember(ctx context.Context, groupID string, removedBy, targetUserID int64) error {
 	// Cannot remove the owner
-	var ownerID int64
-	s.db.QueryRowContext(ctx,
-		"SELECT creator_user_id FROM groups WHERE id=$1", groupID).Scan(&ownerID)
-	if targetUserID == ownerID {
+	role, err := s.memberRole(ctx, groupID, targetUserID)
+	if err != nil {
+		return err
+	}
+	if role == "owner" {
 		return ErrCannotRemoveOwner
 	}
 
 	// Verify removedBy has permission
-	var role string
-	err := s.db.QueryRowContext(ctx,
-		"SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL",
-		groupID, removedBy).Scan(&role)
-	if err == sql.ErrNoRows {
-		return ErrNotMember
-	}
-	if err != nil {
+	if err := s.verifyAdmin(ctx, groupID, removedBy); err != nil {
 		return err
 	}
-	if role != "owner" && role != "admin" {
-		return ErrNotAdmin
-	}
+
+	convID := s.convIDFn(groupID)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -243,7 +316,6 @@ func (s *Service) RemoveMember(ctx context.Context, groupID string, removedBy, t
 	}
 
 	// Remove from conversation_members
-	convID := fmt.Sprintf("conv_%s", groupID)
 	tx.ExecContext(ctx,
 		`DELETE FROM conversation_members WHERE conversation_id=$1 AND user_id=$2`,
 		convID, targetUserID)
@@ -253,7 +325,97 @@ func (s *Service) RemoveMember(ctx context.Context, groupID string, removedBy, t
 		`UPDATE groups SET current_members = current_members - 1, updated_at = NOW() WHERE id=$1`,
 		groupID)
 
-	return tx.Commit()
+	// Record group event
+	tx.ExecContext(ctx,
+		`INSERT INTO group_events (group_id, event_type, actor_user_id, target_user_id, created_at)
+		 VALUES ($1, 'member_removed', $2, $3, NOW())`,
+		groupID, removedBy, targetUserID,
+	)
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Hide conversation summary for removed user
+	_, _ = s.db.ExecContext(ctx,
+		`UPDATE conversation_summaries SET is_hidden = TRUE, updated_at = NOW()
+		 WHERE user_id=$1 AND conversation_id=$2`,
+		targetUserID, convID,
+	)
+
+	// Emit event to remaining members + removed user
+	allMembers, _ := s.GetMembers(ctx, groupID)
+	for _, m := range allMembers {
+		s.emitMembershipEvent(ctx, m.UserID, convID, "member_removed", groupID, removedBy, targetUserID)
+	}
+	// Also emit to the removed user
+	s.emitMembershipEvent(ctx, targetUserID, convID, "member_removed", groupID, removedBy, targetUserID)
+
+	return nil
+}
+
+// LeaveGroup allows a member to voluntarily leave a group.
+func (s *Service) LeaveGroup(ctx context.Context, groupID string, userID int64) error {
+	role, err := s.memberRole(ctx, groupID, userID)
+	if err != nil {
+		return err
+	}
+	if role == "owner" {
+		return ErrCannotRemoveSelf
+	}
+
+	convID := s.convIDFn(groupID)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE group_members SET left_at = NOW() WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL`,
+		groupID, userID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNotMember
+	}
+
+	tx.ExecContext(ctx,
+		`DELETE FROM conversation_members WHERE conversation_id=$1 AND user_id=$2`,
+		convID, userID)
+
+	tx.ExecContext(ctx,
+		`UPDATE groups SET current_members = current_members - 1, updated_at = NOW() WHERE id=$1`,
+		groupID)
+
+	tx.ExecContext(ctx,
+		`INSERT INTO group_events (group_id, event_type, actor_user_id, target_user_id, created_at)
+		 VALUES ($1, 'member_left', $2, $3, NOW())`,
+		groupID, userID, userID,
+	)
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Hide conversation summary
+	_, _ = s.db.ExecContext(ctx,
+		`UPDATE conversation_summaries SET is_hidden = TRUE, updated_at = NOW()
+		 WHERE user_id=$1 AND conversation_id=$2`,
+		userID, convID,
+	)
+
+	// Emit event to user who left + remaining members
+	s.emitMembershipEvent(ctx, userID, convID, "member_left", groupID, userID, userID)
+	allMembers, _ := s.GetMembers(ctx, groupID)
+	for _, m := range allMembers {
+		s.emitMembershipEvent(ctx, m.UserID, convID, "member_left", groupID, userID, userID)
+	}
+
+	return nil
 }
 
 // GetMembers returns all active members of a group.
@@ -287,13 +449,7 @@ func (s *Service) GetConversationID(groupID string) string {
 // ── Helpers ────────────────────────────────────────
 
 func (s *Service) verifyAdmin(ctx context.Context, groupID string, userID int64) error {
-	var role string
-	err := s.db.QueryRowContext(ctx,
-		"SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL",
-		groupID, userID).Scan(&role)
-	if err == sql.ErrNoRows {
-		return ErrNotMember
-	}
+	role, err := s.memberRole(ctx, groupID, userID)
 	if err != nil {
 		return err
 	}
@@ -301,4 +457,32 @@ func (s *Service) verifyAdmin(ctx context.Context, groupID string, userID int64)
 		return ErrNotAdmin
 	}
 	return nil
+}
+
+func (s *Service) memberRole(ctx context.Context, groupID string, userID int64) (string, error) {
+	var role string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL",
+		groupID, userID).Scan(&role)
+	if err == sql.ErrNoRows {
+		return "", ErrNotMember
+	}
+	return role, err
+}
+
+func (s *Service) ensureSummary(ctx context.Context, userID int64, conversationID string) {
+	_, _ = s.db.ExecContext(ctx,
+		`INSERT INTO conversation_summaries (user_id, conversation_id, last_message_preview, last_message_at, unread_count, updated_at)
+		 VALUES ($1, $2, '', NOW(), 0, NOW())
+		 ON CONFLICT (user_id, conversation_id) DO NOTHING`,
+		userID, conversationID,
+	)
+}
+
+func (s *Service) emitMembershipEvent(ctx context.Context, userID int64, conversationID, eventType, groupID string, actorUserID int64, targetUserIDs ...int64) {
+	if s.sync == nil {
+		return
+	}
+	payload := fmt.Sprintf(`{"group_id":"%s","actor_user_id":%d,"event_type":"%s"}`, groupID, actorUserID, eventType)
+	_ = s.sync.AppendEventWithConv(ctx, userID, conversationID, eventType, []byte(payload))
 }
