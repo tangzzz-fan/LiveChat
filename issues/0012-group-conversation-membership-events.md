@@ -1,8 +1,8 @@
 ---
 id: "0012"
 title: "群会话创建 + 成员管理 + 群事件投影"
-status: ready-for-agent
-labels: ["ready-for-agent"]
+status: complete
+labels: ["done"]
 parent: "0010"
 blocked_by: ["0011"]
 created_at: 2026-07-20

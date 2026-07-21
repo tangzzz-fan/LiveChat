@@ -13,7 +13,7 @@
 | [0009](0009-read-receipts-observability.md) | 已读回执 + 多端一致性收敛 + 可观测性 | complete | `done` | 2026-07-20 |
 | [0010](0010-phase-2-user-visible-capabilities.md) | 阶段二：用户可感知能力 — 认证、群聊、媒体与推送 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
 | [0011](0011-auth-device-sessions-push-token.md) | 认证收敛 + 设备会话管理 + Push Token 注册 | complete | `done` | 2026-07-20 |
-| [0012](0012-group-conversation-membership-events.md) | 群会话创建 + 成员管理 + 群事件投影 | ready-for-agent | `ready-for-agent`, `blocked-by:0011` | 2026-07-20 |
+| [0012](0012-group-conversation-membership-events.md) | 群会话创建 + 成员管理 + 群事件投影 | complete | `done`, `blocked-by:0011` | 2026-07-20 |
 | [0013](0013-group-fanout-tiering-hot-group-protection.md) | 群消息扇出 + 分级策略 + 热点群保护 | ready-for-agent | `ready-for-agent`, `blocked-by:0012` | 2026-07-20 |
 | [0014](0014-image-media-upload-thumbnail-download.md) | 图片消息直传 + 缩略图 + 授权下载 | ready-for-agent | `ready-for-agent` | 2026-07-20 |
 | [0015](0015-offline-push-background-wakeup-dedupe.md) | 离线推送编排 + 后台唤醒 + 去重 | ready-for-agent | `ready-for-agent`, `blocked-by:0011` | 2026-07-20 |
