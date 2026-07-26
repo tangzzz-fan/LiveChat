@@ -11,9 +11,9 @@
 | 场景 | 输入假设 | 放大后压力 | 本仓库现状 |
 |------|----------|------------|------------|
 | 重连风暴 | 网关重启，1 万设备同时握手 | 握手 QPS 尖峰 + Redis 路由写 | 客户端退避已实现；**IP/user 连接限流已落地（见下）**；压测场景 `reconnect_storm` |
-| 文本写入高峰 | 1k–10k msg/s | DB 事务 + SEQUENCE + outbox | 单会话 `nextval` 串行；无发送侧全局限流 |
+| 文本写入高峰 | 1k–10k msg/s | DB 事务 + SEQUENCE + outbox | 单会话 `nextval` 串行；**发送侧按 outbox 积压反压 429（0032）** |
 | 群写扩散 | 200 人群 × 100 msg/s | ~2 万 sync_events/s | 三级扇出 + 热点 `ErrGroupBusy` |
-| Outbox 背压 | Consumer 停 / 变慢 | pending 线性涨，实时投递滞后 | Consumer 可追平；**发送侧尚未按 pending 反压 429** |
+| Outbox 背压 | Consumer 停 / 变慢 | pending 线性涨，实时投递滞后 | Consumer 可追平；**pending 超阈时 send 返回 429 + `Retry-After`，积压被封顶** |
 | 缓存失效叠加 | 热点 key 过期 + 高 QPS | DB 被打穿 | 工程问题 12 有策略；需靠压测验证 |
 
 ### 简易数量级模拟（不依赖跑服务）
@@ -51,12 +51,17 @@
 | 故障演练 | Spec 12 §7, 0020 | `docs/chaos/01`–`06` |
 | Outbox 积压可观测 | Spec 12 | Consumer `Metrics()` pending/lag |
 
+### 已补齐（2026-07-26）
+
+- **发送侧背压**（0032）：`internal/backpressure` 后台采样 `pending + processing`，超阈时 send 返回 429 + `Retry-After`。实测暂停 consumer 后 95.2% 的发送被挡下、pending 停在 88 而非无限增长；恢复后无需重启即放行。对照演练见 [chaos 02](../chaos/02-outbox-backpressure.md)。
+- **基线报告**（0031）：五场景实测见 [`local-measured-baseline.md`](../../load_test/baselines/local-measured-baseline.md)。首个撞到的天花板是 Gateway 接入限流（每 IP 5 conn/s），不是数据库。
+
 ### 仍开放的缺口（学习优先级）
 
-1. **发送侧背压**：`outbox_pending` 超阈时 HTTP 429（见 adaptive-learning-roadmap §2）
-2. **幂等窗口缓存**：高并发重试时减轻 unique 冲突压力（roadmap §10）
-3. **基线报告**：`load_test/baselines/` 需在本机服务拉起后跑一轮填数
-4. **Gateway 多节点 failover**：chaos 05 在单机只能验证重连，不能验证跨节点导流
+1. **幂等窗口缓存**：高并发重试时减轻 unique 冲突压力（roadmap §10）
+2. **Gateway 多节点 failover**：chaos 05 在单机只能验证重连，不能验证跨节点导流
+3. **客户端 429 退避**：服务端语义已具备，iOS 端实现属 0022–0028 与 [iOS 高负载设计](../ios-high-load-client.md)
+4. **多机压测**：单 IP 无法绕过接入限流，本机数字不能外推容量
 
 ## 替代方案及取舍
 

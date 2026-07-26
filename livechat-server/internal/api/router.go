@@ -28,8 +28,32 @@ import (
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/traceutil"
 )
 
+// SendLimiter sheds new sends while the outbox backlog is too deep.
+// Implemented by internal/backpressure.Limiter.
+type SendLimiter interface {
+	Allow() (bool, time.Duration)
+	Pending() int64
+}
+
+// Option customizes the router without breaking existing call sites.
+type Option func(*routerOptions)
+
+type routerOptions struct {
+	sendLimiter SendLimiter
+}
+
+// WithSendLimiter wires outbox backpressure into the send path (ticket 0032).
+func WithSendLimiter(l SendLimiter) Option {
+	return func(o *routerOptions) { o.sendLimiter = l }
+}
+
 // Router builds the HTTP handler tree for Message Service.
-func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *media.Service) http.Handler {
+func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *media.Service, opts ...Option) http.Handler {
+	var options routerOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	mux := http.NewServeMux()
 
 	msgSvc := messages.NewService(db)
@@ -52,7 +76,11 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *m
 	mux.HandleFunc("GET /health", handleHealth(db, rdb))
 
 	// Metrics
-	mux.Handle("GET /metrics", metrics.Handler())
+	if collector, ok := options.sendLimiter.(interface{ Metrics() map[string]int64 }); ok {
+		mux.Handle("GET /metrics", metrics.Handler(collector.Metrics))
+	} else {
+		mux.Handle("GET /metrics", metrics.Handler())
+	}
 
 	// Device management
 	authMw := newAuthMiddleware(authSvc, db)
@@ -61,7 +89,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *m
 	mux.Handle("POST /v1/devices/push-token", authMw.Wrap(http.HandlerFunc(handleUpdatePushToken(db))))
 
 	// Core endpoints
-	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc))))
+	mux.Handle("POST /v1/messages/send", authMw.Wrap(http.HandlerFunc(handleSendMessage(msgSvc, options.sendLimiter))))
 	mux.Handle("GET /v1/sync/events", authMw.Wrap(http.HandlerFunc(handleGetSyncEvents(syncSvc))))
 	mux.Handle("GET /v1/conversations/{cid}/messages", authMw.Wrap(http.HandlerFunc(handleGetMessages(syncSvc))))
 	mux.Handle("GET /v1/conversations", authMw.Wrap(http.HandlerFunc(handleListConversations(convSvc))))
@@ -569,8 +597,31 @@ type sendMessageRequest struct {
 	Content         string `json:"content"`
 }
 
-func handleSendMessage(svc *messages.Service) http.HandlerFunc {
+func handleSendMessage(svc *messages.Service, limiter SendLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Shed load before doing any work: if the outbox is too far behind,
+		// accepting more writes only deepens the backlog.
+		if limiter != nil {
+			if allowed, retryAfter := limiter.Allow(); !allowed {
+				retrySec := int(retryAfter.Seconds())
+				if retrySec < 1 {
+					retrySec = 1
+				}
+				slog.Warn("send rejected by outbox backpressure",
+					"outbox_pending", limiter.Pending(),
+					"retry_after_sec", retrySec,
+					"trace_id", TraceIDFromContext(r.Context()),
+				)
+				w.Header().Set("Retry-After", strconv.Itoa(retrySec))
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{
+					"error":           "outbox backlog too deep, retry later",
+					"code":            "outbox_backpressure",
+					"retry_after_sec": retrySec,
+				})
+				return
+			}
+		}
+
 		var req sendMessageRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))

@@ -8,9 +8,9 @@ if [ "$ENV" != "dev" ]; then
   exit 1
 fi
 
-PID=$(pgrep -f "outbox-consumer" | head -1)
+PID=$(pgrep -x "outbox-consumer" | head -1)
 if [ -z "$PID" ]; then
-  echo "[chaos] No outbox-consumer process found"
+  echo "[chaos] No outbox-consumer process found (expects the built binary; run 'make build' then './outbox-consumer')"
   exit 1
 fi
 

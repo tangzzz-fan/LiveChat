@@ -12,6 +12,7 @@ import (
 
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/api"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/auth"
+	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/backpressure"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/conversations"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/infra"
 	"github.com/tangzzz-fan/LiveChat/livechat-server/internal/media"
@@ -102,8 +103,12 @@ func main() {
 		}
 	}()
 
+	// Send-side outbox backpressure (ticket 0032)
+	sendLimiter := backpressure.NewLimiter(db, backpressure.ConfigFromEnv())
+	go sendLimiter.Run(ctx)
+
 	// Router
-	mux := api.NewRouter(db, rdb, authSvc, mediaSvc)
+	mux := api.NewRouter(db, rdb, authSvc, mediaSvc, api.WithSendLimiter(sendLimiter))
 	syncSvc := sync.NewService(db)
 	receiptSvc := receipts.NewService(db, syncSvc, conversations.NewService(db))
 

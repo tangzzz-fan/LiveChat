@@ -1,8 +1,8 @@
 ---
 id: "0032"
 title: "发送侧背压：outbox pending 超阈返回 429"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: "0029"
 blocked_by: ["0031"]
 created_at: 2026-07-26
@@ -22,13 +22,13 @@ created_at: 2026-07-26
 
 ## Acceptance criteria
 
-- [ ] message-service 在发送路径检查 outbox 积压指标（pending count 或 lag；阈值可配置，默认值写入文档）
-- [ ] 超阈时 `POST /v1/messages/send` 返回 HTTP 429，响应含 `Retry-After`（秒）
-- [ ] 未超阈时行为不变；幂等键逻辑不受误伤（已 accepted 的重放仍返回既有结果）
-- [ ] 指标/日志可观测背压触发次数（如 `send_backpressure_total` 或等价日志）
-- [ ] 单元或集成测试覆盖：超阈 → 429；恢复后 → 200
-- [ ] 更新 `docs/load-practice/`（或 chaos 02）对照演练：有/无背压的 pending 曲线与客户端重试语义
-- [ ] 更新 API 参考中 send 的 429 说明
+- [x] message-service 在发送路径检查 outbox 积压指标（`internal/backpressure` 后台采样 `pending + processing`；阈值 `SEND_BACKPRESSURE_PENDING_THRESHOLD`，默认 2000）
+- [x] 超阈时 `POST /v1/messages/send` 返回 HTTP 429，响应含 `Retry-After`（秒）与 `code=outbox_backpressure`
+- [x] 未超阈时行为不变；429 在写入前返回，不产生任何行，重试沿用同一 `client_message_id` 走正常幂等路径
+- [x] 指标可观测：`send_backpressure_rejected_total` / `_pending_sample` / `_threshold`，另有 WARN 日志带 trace_id
+- [x] 测试覆盖：`internal/backpressure`（阈值/恢复/禁用/配置）+ `internal/api`（429 + `Retry-After` + 未写入 + 恢复 200 + 无 limiter 时行为不变）
+- [x] [chaos 02](../docs/chaos/02-outbox-backpressure.md) 加入三阶段对照演练与本机实测数字
+- [x] [API 参考](../docs/API参考.md) 补 send 的 429 语义与客户端退避要求
 
 ## Blocked by
 
@@ -40,3 +40,25 @@ created_at: 2026-07-26
 - 检查积压的查询不能成为新热点：可用缓存计数 / 周期采样，避免每次 send 全表 count。
 - 客户端（含未来 iOS）应对 429 做退避；本票服务端语义优先，客户端实现属后续票。
 - 可选后续（不阻塞本票）：幂等窗口缓存、把 `internal/cache` 接到热路径。
+
+## 实施记录（2026-07-26）
+
+**设计取舍**
+
+- 采样而非实时查询：后台每 `SEND_BACKPRESSURE_SAMPLE_MS`（默认 2s）做一次 `COUNT(*)`，send 路径只读 atomic。代价是样本最多滞后一个间隔，对「方向正确即可」的信号可以接受，避免把积压检查本身变成新热点。
+- **采样失败时 fail open**：查询出错只记 WARN，不阻塞发送。监控挂掉不应该等于业务挂掉。
+- 阈值 `<= 0` 表示关闭，默认 2000 偏保守。
+- 用可选参数 `api.WithSendLimiter()` 接入 router，避免为新增一个依赖去改 26 处已有调用点，同时保证未接入时行为完全不变。
+
+**实测对照（阈值 50，见 chaos 02）**
+
+| 阶段 | send | pending |
+|------|------|---------|
+| consumer 正常 | 167 rps，err 0.6% | 0–8 |
+| consumer 暂停 | 95.2% 返回 429 | 停在 88 |
+| consumer 恢复 | 82 rps，err 0.2% | 回到 0 |
+
+**顺带修掉的两个坑**
+
+- `scripts/chaos/outbox-pause.sh` 用 `pgrep -f` 会命中 shell 包装进程，SIGSTOP 停错对象、consumer 照常消费，导致演练无效。改为 `pgrep -x` 匹配二进制。
+- `scripts/chaos/health-check.sh` 的 `check()` 把标签当命令执行（`"$@"` 未 shift），7 项检查全部误报失败。已修并加入背压指标输出。

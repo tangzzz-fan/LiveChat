@@ -133,6 +133,31 @@
 | 幂等 | `(sender_user_id, client_message_id)` 唯一；重试返回已有消息且 `is_duplicate=true` |
 | 成员 | 非会话成员 → `403` |
 | `message_type=image` | `content` 须为 JSON，且含 `attachment.object_key` / `mime_type` / `size_bytes` |
+| 背压 | Outbox 积压超阈时 → `429`，见下 |
+
+#### `429` — Outbox 背压
+
+当 outbox 积压（`pending` + `processing`）超过阈值时，服务端在写入前拒绝请求，避免积压继续膨胀：
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 5
+```
+
+```json
+{
+  "error": "outbox backlog too deep, retry later",
+  "code": "outbox_backpressure",
+  "retry_after_sec": 5
+}
+```
+
+客户端处理要点：
+
+- **必须**按 `Retry-After` 退避后重试，并叠加 jitter，避免所有端同时回来造成第二轮尖峰。
+- 重试**沿用同一个 `client_message_id`**：被 429 的请求没有写入任何数据，重试走正常幂等路径，不会产生重复消息。
+- 本地消息状态应停留在 `sending`（可重试），不要转成 `failed`（终态）。
+- 服务端配置：`SEND_BACKPRESSURE_PENDING_THRESHOLD`（默认 2000，`<=0` 关闭）、`SEND_BACKPRESSURE_RETRY_AFTER_SEC`（默认 5）、`SEND_BACKPRESSURE_SAMPLE_MS`（默认 2000）。对照演练见 [chaos 02](chaos/02-outbox-backpressure.md)。
 
 > **缺口（客户端需注意）**：当前 **没有** `POST /v1/conversations` 创建 1:1 私聊。可用：
 > 1. 建群 `POST /v1/groups`（返回 `conversation_id`）作为多人/双人会话；或  

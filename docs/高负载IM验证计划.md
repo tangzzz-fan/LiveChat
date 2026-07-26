@@ -13,11 +13,11 @@
 | 问题族 | 本仓现状 | 能否今天模拟 |
 |--------|----------|--------------|
 | 写扩散 / 热点群 | `fanout` 分级 + `ErrGroupBusy` | 是（`group_fanout` + chaos 06） |
-| 重连风暴 | Gateway IP/user 限流已有；客户端退避未接 | 部分（Python reconnect） |
-| Outbox 积压 | Consumer 有；**无** HTTP 429 反压 | 可观察（chaos 02）；解法待补 |
+| 重连风暴 | Gateway IP/user 限流已有；客户端退避未接 | 是（`reconnect_storm`，jitter 对照已实测） |
+| Outbox 积压 | Consumer + **发送侧 429 背压（0032）** | 是（chaos 02 三阶段对照已实测） |
 | 序号单写点 | SEQUENCE 串行 | 可压测观察延迟 |
 | 缓存击穿 | `internal/cache` 未被业务引用 | 暂不能在热路径验证 |
-| 多端一致 | sync API 已有 | 正确性可测；`sync_backfill` 仍 stub |
+| 多端一致 | sync API 已有 | 是（`sync_backfill` 已实装并实测） |
 
 ### iOS 双重定位
 
@@ -34,14 +34,20 @@ flowchart LR
   B -.-> E
 ```
 
-| 阶段 | Issue | 内容 | 依赖 |
+| 阶段 | Issue | 内容 | 状态 |
 |------|-------|------|------|
-| 父票 | [0029](../issues/0029-high-load-im-validation.md) | 高负载验证总览与门禁 | — |
-| A | [0030](../issues/0030-load-practice-playbook.md) | 业界实践模拟手册 | — |
-| B | [0031](../issues/0031-harden-load-test-chaos.md) | 压测 stub 硬化 + 基线 + chaos 04 | 可与 0030 并行；手册命令依赖本票 |
-| C | [0032](../issues/0032-send-side-outbox-backpressure.md) | outbox pending → send 429 | 建议 blocked_by 0031 |
-| D-1 | [0033](../issues/0033-ios-high-load-client-design.md) | iOS 高负载/弱网方案与坑点 | —（文档先行） |
-| D-2 | 0022–0028 | 多端正确性（已开票） | 0022→0026∥→0023→0025 |
+| 父票 | [0029](../issues/0029-high-load-im-validation.md) | 高负载验证总览与门禁 | 进行中（服务端部分已完成） |
+| A | [0030](../issues/0030-load-practice-playbook.md) | 业界实践模拟手册 | ✅ complete |
+| B | [0031](../issues/0031-harden-load-test-chaos.md) | 压测 stub 硬化 + 基线 + chaos 04 | ✅ complete（[实测基线](../load_test/baselines/local-measured-baseline.md)） |
+| C | [0032](../issues/0032-send-side-outbox-backpressure.md) | outbox pending → send 429 | ✅ complete（[对照演练](chaos/02-outbox-backpressure.md)） |
+| D-1 | [0033](../issues/0033-ios-high-load-client-design.md) | iOS 高负载/弱网方案与坑点 | ✅ complete |
+| D-2 | 0022–0028 | 多端正确性（已开票） | 待做：0022→0026∥→0023→0025 |
+
+### 本轮实测得到的三个结论
+
+1. **本机最先撞到的不是数据库，而是 Gateway 接入限流**（每 IP 5 conn/s）。单 IP 压测无法外推连接容量。
+2. **重连 jitter 直接决定恢复成功率**：500ms jitter 下 2/10 成功，无 jitter 0/10 全被拒。
+3. **发送侧背压把积压封了顶**：暂停 consumer 后 95.2% 发送返回 429，pending 停在 88 而非无限增长，恢复后自动放行。
 
 ## 阶段要点
 
