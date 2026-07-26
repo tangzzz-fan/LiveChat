@@ -1,15 +1,17 @@
 ---
 id: "0023"
 title: "iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: superseded
+labels: ["wontfix", "superseded"]
 parent: "0021"
 blocked_by: ["0022"]
 created_at: 2026-07-21
+superseded_by: "0035"
 ---
 
 # 0023 — iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话
 
+> **已作废（superseded）**：见 [0035](0035-ios-client-rewrite.md)。
 ## Parent
 
 [0021 - iOS 客户端架构骨架](0021-ios-client-architecture-skeleton.md)

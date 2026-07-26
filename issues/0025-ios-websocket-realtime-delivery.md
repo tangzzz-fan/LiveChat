@@ -1,15 +1,17 @@
 ---
 id: "0025"
 title: "iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: superseded
+labels: ["wontfix", "superseded"]
 parent: "0021"
 blocked_by: ["0024"]
 created_at: 2026-07-21
+superseded_by: "0035"
 ---
 
 # 0025 — iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY
 
+> **已作废（superseded）**：见 [0035](0035-ios-client-rewrite.md)。传输默认原生 WS + `WebSocketTransport` 抽象。
 ## Parent
 
 [0021 - iOS 客户端架构骨架](0021-ios-client-architecture-skeleton.md)

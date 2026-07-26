@@ -23,16 +23,19 @@
 | [0019](0019-load-test-framework-baseline.md) | Phase 3 P0：压测框架与容量基线报告 | complete | `done`, `blocked-by:0011,0012,0013,0018` | 2026-07-21 |
 | [0020](0020-chaos-engineering-runbooks.md) | Phase 3 P0：故障演练手册与恢复流程 | complete | `done`, `blocked-by:0018` | 2026-07-21 |
 | [0021](0021-ios-client-architecture-skeleton.md) | Phase 3 P1：iOS 客户端架构骨架 | complete | `done`, `p1` | 2026-07-21 |
-| [0022](0022-ios-auth-otp-keychain-login-ui.md) | iOS 登录：OTP + Keychain + 最小登录 UI | open | `ready-for-agent`, `p1` | 2026-07-21 |
-| [0023](0023-ios-local-first-send-grdb-http.md) | iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话 | open | `ready-for-agent`, `p1`, `blocked-by:0022` | 2026-07-21 |
-| [0024](0024-ios-incremental-sync-executor.md) | iOS 增量同步：SyncExecutor + 多端补拉 | open | `ready-for-agent`, `p1`, `blocked-by:0023` | 2026-07-21 |
-| [0025](0025-ios-websocket-realtime-delivery.md) | iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
+| [0022](0022-ios-auth-otp-keychain-login-ui.md) | iOS 登录：OTP + Keychain + 最小登录 UI | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
+| [0023](0023-ios-local-first-send-grdb-http.md) | iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话 | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
+| [0024](0024-ios-incremental-sync-executor.md) | iOS 增量同步：SyncExecutor + 多端补拉 | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
+| [0025](0025-ios-websocket-realtime-delivery.md) | iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
 | [0026](0026-server-direct-conversation-api.md) | 服务端 1:1 建会话 API | complete | `done`, `p1` | 2026-07-21 |
-| [0027](0027-ios-image-media-send-display.md) | iOS 图片消息：上传 + 发送 + 展示 | open | `ready-for-agent`, `p1`, `blocked-by:0025` | 2026-07-21 |
-| [0028](0028-ios-push-token-silent-sync.md) | iOS 推送 Token 注册 + 静默唤醒触发 sync | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
+| [0027](0027-ios-image-media-send-display.md) | iOS 图片消息：上传 + 发送 + 展示 | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
+| [0028](0028-ios-push-token-silent-sync.md) | iOS 推送 Token 注册 + 静默唤醒触发 sync | superseded | `wontfix`, `superseded→0035` | 2026-07-21 |
 | [0029](0029-high-load-im-validation.md) | 高负载 IM 验证：实践手册、压测硬化、发送背压与 iOS 抗压方案 | complete | `done`, `p0` | 2026-07-26 |
 | [0030](0030-load-practice-playbook.md) | 高负载业界实践模拟手册（load-practice） | complete | `done`, `p0` | 2026-07-26 |
 | [0031](0031-harden-load-test-chaos.md) | 压测与混沌演练硬化：stub、基线数字、chaos 04 注入 | complete | `done`, `p0` | 2026-07-26 |
 | [0032](0032-send-side-outbox-backpressure.md) | 发送侧背压：outbox pending 超阈返回 429 | complete | `done`, `p0` | 2026-07-26 |
 | [0033](0033-ios-high-load-client-design.md) | iOS 高负载/弱网客户端方案与坑点（文档先行） | complete | `done`, `p0` | 2026-07-26 |
 | [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | complete | `done`, `p1` | 2026-07-26 |
+| [0035](0035-ios-client-rewrite.md) | iOS 客户端从零重写：SPM 多包 + GRDB + TGReduxKit + 薄 App | open | `ready-for-agent`, `p0` | 2026-07-26 |
+| [0036](0036-ios-rewrite-design.md) | iOS 重写设计：Spec 13 修订 + 决策文档（Redux/WS/后台） | complete | `done`, `p0` | 2026-07-26 |
+| [0037](0037-ios-spm-scaffold.md) | iOS SPM 脚手架：清空重写 + 本地依赖；HITL 创建 Xcode 工程 | open | `ready-for-human`, `p0`, `blocked-by:0036` | 2026-07-26 |

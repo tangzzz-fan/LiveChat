@@ -6,17 +6,28 @@
 
 ## 2. 设计原则
 
-- **UI 只消费状态，不直接拼装业务真相。** 页面从 ViewModel 读取，ViewModel 从 Repository 读取，Repository 从本地 DB 读取。
-- **本地数据库是客户端单一可信状态源。** 网络结果先转为领域事件，再更新本地 DB 投影。
+- **UI 只消费状态，不直接拼装业务真相。** Presentation 读投影与视图状态；不直接拼装业务真相。
+- **本地数据库是客户端单一可信状态源（数据真相）。** 网络结果先转为领域事件，再更新本地 DB 投影；消息列表不以内存状态树为权威。
+- **Presentation 状态与数据真相分离。** TGReduxKit Store 只持有视图真相（导航、连接横幅、输入草稿、当前分页窗口投影）；全量消息与游标留在 GRDB。
 - **发送队列、同步队列和推送事件统一进入状态机。** 避免多入口并发修改同一份数据。
 - **离线优先。** 断网时优先使用本地数据，恢复后执行增量同步。
+- **前台长连、后台唤醒。** 不在后台硬撑 WebSocket；进后台允许断开，靠 APNs / Silent Push 唤醒后增量 sync。
+
+### 2.1 工程形态（拍板）
+
+- **纯 SPM 多 package + 薄 App target**（App 只做组装与 UI 入口）。
+- **本地 DB：GRDB**（单 `DatabaseQueue` + WAL）。
+- **协议编解码：swift-protobuf**（与网关 `ws_frame.proto` 对齐）。
+- **Presentation 状态：TGReduxKit**（比 TCA 轻；Reducer 纯函数，副作用进 Middleware → UseCase）。
+- **清空 `ios/` 后重写**；旧骨架与 0022–0028 实现票作废（服务端 0026 保留）。
+- **依赖默认本地 path**：`/Users/bigapple/Developments/TG Libraries/` 下的 `GRDB.swift`（v7.7.1）、`swift-protobuf`（1.31.0）、`TGReduxKit`。不引入 Alamofire / Starscream / gRPC-Swift（客户端不走 gRPC）。
 
 ## 3. 模块分层与依赖关系
 
 ```
 ┌─────────────────────────────────────────────┐
 │           ChatPresentation                  │
-│  SwiftUI/UIKit Views + ViewModels           │
+│  SwiftUI + TGReduxKit Store / ScopedStore   │
 │  依赖: ChatApplication                      │
 └──────────────────┬──────────────────────────┘
                    │
@@ -105,11 +116,22 @@ CREATE TABLE sync_cursors (
 
 ### 4.2 本地数据更新规则
 
-- 所有 UI 展示数据来自本地 DB 查询（配合 `@Query` 或 Combine publisher）。
+- 所有 UI 展示数据来自本地 DB 查询（GRDB `ValueObservation`，**去抖约 16–33ms**），禁止每条消息一次全表 `reload`。
+- 大会话按 `(conversation_id, conversation_seq)` 游标分页；Store 只持有**当前可见窗口**投影，不缓存全量消息数组。
 - 发送中的消息先以 `status = queued` 写入本地 DB，再发起网络请求。
 - 服务端确认后，更新 `server_message_id`、`conversation_seq`、`status = accepted`。
 - 收到 WebSocket / 推送 / 同步事件后，统一转换为领域事件并写入 DB。
-- 数据库更新触发 UI 自动刷新。
+- 数据库更新触发 UI 自动刷新（观察 → dispatch 投影变更到 Store，或 SwiftUI 直接绑 observation）。
+
+### 4.3 Presentation：TGReduxKit 边界
+
+| GRDB（数据真相） | Store（视图真相） |
+|------------------|-------------------|
+| 全量消息、游标、会话摘要 | 当前页消息投影、草稿、连接横幅、导航、登录流 |
+| 批量写事务 | 纯 Reducer 状态变换 |
+| Infrastructure 后台队列 | `@MainActor` / Middleware 调 UseCase |
+
+**禁止**：根 State 塞整会话消息；WS 每帧 dispatch；Reducer 内做 DB/网络。
 
 ## 5. 本地状态机
 
@@ -247,6 +269,14 @@ protocol WebSocketRepository {
     var messageStream: AsyncStream<WebSocketFrame> { get }
 }
 
+/// 传输层抽象：默认 URLSessionWebSocketTask；可替换 Starscream / NWConnection，上层不改。
+protocol WebSocketTransport {
+    var events: AsyncStream<TransportEvent> { get } // .connected / .frame(Data) / .closed
+    func connect() async throws
+    func send(_ frame: Data) async throws
+    func close()
+}
+
 protocol AuthRepository {
     func login(phone: String, code: String) async throws -> AuthTokens
     func refreshToken() async throws -> AuthTokens
@@ -345,11 +375,14 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 ### 8.2 前后台切换
 
 - **进入后台**：
-  - 保持 WebSocket 连接，心跳间隔延长至 120s。
-  - 注册 Silent Push，确保新消息能唤醒。
+  - **主动断开或允许系统掐断 WebSocket**（不依赖后台保活长连）。
+  - 心跳停止；不注册「靠 WS 收消息」的预期。
+  - 确保 Push Token 已注册；新消息靠 APNs / Silent Push 唤醒。
+  - 后台预算内：Silent Push / BGTask 只触发 **增量 sync**，不做重 UI 与大媒体。
 - **回到前台**：
-  - 恢复 30s 心跳。
+  - 重连 WebSocket（指数退避 + jitter，single-flight）。
   - 立即检查 `last_event_seq` 是否落后，触发增量同步。
+  - 恢复应用层心跳（协议已有 heartbeat opcode；用于兜底原生 WS 断线检测弱点）。
 
 ### 8.3 断网恢复
 
@@ -379,10 +412,12 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 ## 11. 交付物
 
 - [ ] 模块依赖图（本 spec §3）
+- [ ] 工程形态与依赖拍板（本 spec §2.1）
 - [ ] 本地数据库 Schema（本 spec §4.1）
+- [ ] TGReduxKit / GRDB 边界（本 spec §4.3）
 - [ ] 消息状态机图（本 spec §5.1）
 - [ ] 发送队列与同步执行器设计（本 spec §5.2–5.3）
-- [ ] 仓储协议清单（本 spec §6）
+- [ ] 仓储协议清单 + `WebSocketTransport`（本 spec §6）
 - [ ] 推送与同步统一入口设计（本 spec §7）
-- [ ] App 生命周期恢复流程（本 spec §8）
+- [ ] App 生命周期恢复流程（本 spec §8，含前台长连/后台唤醒）
 - [ ] P0 客户端能力边界（本 spec §9）

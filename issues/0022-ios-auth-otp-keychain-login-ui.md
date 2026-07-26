@@ -1,14 +1,17 @@
 ---
 id: "0022"
 title: "iOS 登录：OTP + Keychain + 最小登录 UI"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: superseded
+labels: ["wontfix", "superseded"]
 parent: "0021"
 blocked_by: []
 created_at: 2026-07-21
+superseded_by: "0035"
 ---
 
 # 0022 — iOS 登录：OTP + Keychain + 最小登录 UI
+
+> **已作废（superseded）**：iOS 清空重写，见 [0035](0035-ios-client-rewrite.md)。功能切片在脚手架 [0037](0037-ios-spm-scaffold.md) 完成后重开。
 
 ## Parent
 

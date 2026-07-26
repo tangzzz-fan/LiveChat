@@ -7,7 +7,8 @@ LiveChat 是一个面向学习的大规模即时通信系统设计项目，目�
 **高负载验证推进计划（0029–0034）**：[`docs/高负载IM验证计划.md`](docs/高负载IM验证计划.md)。  
 **验证链路怎么设计、对外怎么讲**：[`docs/验证链路设计方法论.md`](docs/验证链路设计方法论.md)。  
 **客户端 API**：[`docs/API参考.md`](docs/API参考.md)。  
-**多台 iOS 能否接入、怎么按 Spec 13 做**：[`docs/iOS多端接入评估与实现.md`](docs/iOS多端接入评估与实现.md)。
+**多台 iOS 能否接入、怎么按 Spec 13 做**：[`docs/iOS多端接入评估与实现.md`](docs/iOS多端接入评估与实现.md)。  
+**iOS 从零重写决策（0035+）**：[`docs/ios-client-rewrite.md`](docs/ios-client-rewrite.md)。
 
 当前仓库已完成 Phase 1–3 的 P0/P1 学习闭环实现（服务端在 `livechat-server/`），规格仍以 `Specs/` 为设计源。
 

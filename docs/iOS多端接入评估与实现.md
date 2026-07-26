@@ -173,6 +173,7 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 | [`架构设计总览.md`](./架构设计总览.md) | 全站拓扑与痛点解法 |
 | [`高负载IM验证计划.md`](./高负载IM验证计划.md) | 高负载验证阶段；含 iOS 抗压定位 |
 | [`ios-high-load-client.md`](./ios-high-load-client.md) | iOS 高负载/弱网方案与坑点（0033） |
+| [`ios-client-rewrite.md`](./ios-client-rewrite.md) | iOS 从零重写决策（0035/0036） |
 | [`API参考.md`](./API参考.md) | 客户端调什么接口 |
 | **本文** | iOS 多端能不能做、按 Spec 13 怎么做 |
 | `ios/README.md` | 工程编译与模块树 |
@@ -182,18 +183,13 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 
 ## 7. 推荐的下一张 ticket（若要继续实现）
 
-可拆为连续可演示切片（已建票）：
+**旧 0022–0025 / 0027–0028 已作废。** 当前路径：
 
-1. **[0022](../../issues/0022-ios-auth-otp-keychain-login-ui.md)** iOS AuthRepositoryLive + Keychain + 登录 UI  
-2. **[0023](../../issues/0023-ios-local-first-send-grdb-http.md)** HTTP Message/Sync 前的发送 + GRDB 投影  
-3. **[0024](../../issues/0024-ios-incremental-sync-executor.md)** WebSocket 前的增量同步  
-4. **[0025](../../issues/0025-ios-websocket-realtime-delivery.md)** WebSocketRepository（Protobuf 握手 + 投递）  
-5. **[0026](../../issues/0026-server-direct-conversation-api.md)** 服务端 `direct` 建会话 ✅ 已完成  
-6. **[0027](../../issues/0027-ios-image-media-send-display.md)** 图片消息  
-7. **[0028](../../issues/0028-ios-push-token-silent-sync.md)** 推送 token + 静默 sync  
+1. **[0035](../issues/0035-ios-client-rewrite.md)** 父票：从零重写  
+2. **[0036](../issues/0036-ios-rewrite-design.md)** 设计 ✅ → [`docs/ios-client-rewrite.md`](./ios-client-rewrite.md) + Spec 13 修订  
+3. **[0037](../issues/0037-ios-spm-scaffold.md)** SPM 脚手架（**需你创建 Xcode 工程**）  
+4. 0037 后再拆功能垂直切片（登录 / 发送 / sync / WS / 推送）
 
-高负载/弱网（文档先行，与正确性并行）：
+决策要点：GRDB 数据真相 + TGReduxKit 视图真相；`WebSocketTransport` 默认原生 WS；前台长连、后台 APNs 唤醒。高负载横切见 [`ios-high-load-client.md`](./ios-high-load-client.md)。
 
-8. **[0033](../../issues/0033-ios-high-load-client-design.md)** iOS 高负载方案与坑点 → 产出 `docs/ios-high-load-client.md`；实现横切项后续再开票  
-
-当前仓库 **不必改服务端也能开始 0022–0025**；1:1 会话来源（0026）已就绪，不再需要建群 workaround。
+服务端 1:1 会话 API（[0026](../issues/0026-server-direct-conversation-api.md)）已就绪。

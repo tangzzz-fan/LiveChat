@@ -1,15 +1,17 @@
 ---
 id: "0028"
 title: "iOS 推送 Token 注册 + 静默唤醒触发 sync"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: superseded
+labels: ["wontfix", "superseded"]
 parent: "0021"
 blocked_by: ["0024"]
 created_at: 2026-07-21
+superseded_by: "0035"
 ---
 
 # 0028 — iOS 推送 Token 注册 + 静默唤醒触发 sync
 
+> **已作废（superseded）**：见 [0035](0035-ios-client-rewrite.md)。后台模型改为断开 WS + APNs 唤醒。
 ## Parent
 
 [0021 - iOS 客户端架构骨架](0021-ios-client-architecture-skeleton.md)
