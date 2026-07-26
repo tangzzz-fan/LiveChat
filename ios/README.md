@@ -1,6 +1,6 @@
 # LiveChat iOS（重写脚手架 · 0037）
 
-纯 SPM 多 package + 薄 App target。决策见 [`docs/ios-client-rewrite.md`](../docs/ios-client-rewrite.md) / Spec 13。
+相关：[`API参考.md`](../docs/API参考.md) · [`ios-client-rewrite.md`](../docs/ios-client-rewrite.md) · **手工联调**：[ios-app-testing.md](../docs/ios-app-testing.md)
 
 ## 目录
 
