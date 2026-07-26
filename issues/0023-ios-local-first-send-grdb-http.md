@@ -24,7 +24,7 @@ created_at: 2026-07-21
 
 - [ ] GRDB 对 `messages` / `conversation_summaries` 提供真实读写（替换 stub）
 - [ ] `MessageSendExecutor`（或等价 Use Case）：enqueue → 本地写库 → HTTP send → 更新状态；幂等使用稳定 `client_message_id`
-- [ ] 通过群 API 创建会话并写入本地 summary（在 1:1 API 就绪前作为会话来源）
+- [ ] 通过 `POST /v1/conversations/direct` 或群 API 创建会话并写入本地 summary
 - [ ] 最小 UI：会话列表 + 聊天页输入发送；UI 只订阅本地 DB
 - [ ] 失败路径：`failed` 状态可见，可手动重试（至少一种）
 - [ ] 非法成员/403 时本地状态收敛正确，不留下永久 sending
@@ -35,6 +35,6 @@ created_at: 2026-07-21
 
 ## 技术难点与注意事项
 
-- 服务端暂无 1:1 建会话 HTTP：用建群 workaround；0026 落地后可切换。
+- 1:1 会话来源用 `POST /v1/conversations/direct`（0026 已落地，幂等且顺序无关），不需要建群 workaround。
 - `content` 为 JSON 字符串（如 `{"text":"..."}`），与现有 API 对齐。
 - 状态机合法转移遵循 Spec 13 / ChatDomain `MessageStatus`。

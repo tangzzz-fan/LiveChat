@@ -93,6 +93,7 @@ func NewRouter(db *sql.DB, rdb *redis.Client, authSvc *auth.Service, mediaSvc *m
 	mux.Handle("GET /v1/sync/events", authMw.Wrap(http.HandlerFunc(handleGetSyncEvents(syncSvc))))
 	mux.Handle("GET /v1/conversations/{cid}/messages", authMw.Wrap(http.HandlerFunc(handleGetMessages(syncSvc))))
 	mux.Handle("GET /v1/conversations", authMw.Wrap(http.HandlerFunc(handleListConversations(convSvc))))
+	mux.Handle("POST /v1/conversations/direct", authMw.Wrap(http.HandlerFunc(handleCreateDirectConversation(convSvc))))
 
 	// Group endpoints
 	mux.Handle("POST /v1/groups", authMw.Wrap(http.HandlerFunc(handleCreateGroup(groupSvc))))
@@ -822,6 +823,45 @@ func handleListConversations(svc *conversations.Service) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"conversations": summaries,
 		})
+	}
+}
+
+// ── Direct conversation handler ─────────────────────
+
+type createDirectConversationRequest struct {
+	PeerUserID int64 `json:"peer_user_id"`
+}
+
+func handleCreateDirectConversation(svc *conversations.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req createDirectConversationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse("invalid request body"))
+			return
+		}
+		if req.PeerUserID <= 0 {
+			writeJSON(w, http.StatusBadRequest, errorResponse("peer_user_id is required"))
+			return
+		}
+
+		userID := UserIDFromContext(r.Context())
+		conv, err := svc.EnsureDirect(r.Context(), userID, req.PeerUserID)
+		if err != nil {
+			switch {
+			case errors.Is(err, conversations.ErrSelfConversation):
+				writeJSON(w, http.StatusBadRequest, errorResponse("cannot open a direct conversation with yourself"))
+			case errors.Is(err, conversations.ErrPeerNotFound):
+				writeJSON(w, http.StatusNotFound, errorResponse("peer user not found"))
+			default:
+				slog.Error("ensure direct conversation", "error", err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			}
+			return
+		}
+
+		// Always 200: the endpoint is idempotent, and `created` tells the
+		// client whether this call was the one that made the conversation.
+		writeJSON(w, http.StatusOK, conv)
 	}
 }
 

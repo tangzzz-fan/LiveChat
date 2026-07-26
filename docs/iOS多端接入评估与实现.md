@@ -125,12 +125,12 @@ flowchart LR
 
 验收：A、B 同时在线，A 发送后 B **秒级**出现（无需等 sync）。
 
-### Slice 5 — 会话来源（在 1:1 API 补齐前）
+### Slice 5 — 会话来源
 
-- Use case：`CreateGroup(name: "A-B", memberUserIds: [other])`  
-- 或临时「开发菜单」：粘贴已有 `conversation_id`  
+- 1:1：`POST /v1/conversations/direct { peer_user_id }`（0026 已落地，幂等且顺序无关）  
+- 群：`CreateGroup(name:memberUserIds:)`  
 
-后续可加 ticket：`POST /v1/conversations/direct { peer_user_id }`。
+客户端不需要自己生成会话 ID：同一对用户从任一侧调用都得到同一个 `conv_dm_<小 id>_<大 id>`，重复调用返回 `created=false`。
 
 ### Slice 6 — 推送（可选，Spec 13 §7）
 
@@ -188,7 +188,7 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 2. **[0023](../../issues/0023-ios-local-first-send-grdb-http.md)** HTTP Message/Sync 前的发送 + GRDB 投影  
 3. **[0024](../../issues/0024-ios-incremental-sync-executor.md)** WebSocket 前的增量同步  
 4. **[0025](../../issues/0025-ios-websocket-realtime-delivery.md)** WebSocketRepository（Protobuf 握手 + 投递）  
-5. **[0026](../../issues/0026-server-direct-conversation-api.md)**（可选并行）服务端 `direct` 建会话  
+5. ~~**[0026](../../issues/0026-server-direct-conversation-api.md)** 服务端 `direct` 建会话~~ ✅ 已完成  
 6. **[0027](../../issues/0027-ios-image-media-send-display.md)** 图片消息  
 7. **[0028](../../issues/0028-ios-push-token-silent-sync.md)** 推送 token + 静默 sync  
 
@@ -196,4 +196,4 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 
 8. **[0033](../../issues/0033-ios-high-load-client-design.md)** iOS 高负载方案与坑点 → 产出 `docs/ios-high-load-client.md`；实现横切项后续再开票  
 
-当前仓库 **不必改服务端也能开始 0022–0025**；0026 改善私聊体验。
+当前仓库 **不必改服务端也能开始 0022–0025**；1:1 会话来源（0026）已就绪，不再需要建群 workaround。

@@ -27,7 +27,7 @@
 | [0023](0023-ios-local-first-send-grdb-http.md) | iOS 本地优先发消息：GRDB + HTTP send + 建群拿会话 | open | `ready-for-agent`, `p1`, `blocked-by:0022` | 2026-07-21 |
 | [0024](0024-ios-incremental-sync-executor.md) | iOS 增量同步：SyncExecutor + 多端补拉 | open | `ready-for-agent`, `p1`, `blocked-by:0023` | 2026-07-21 |
 | [0025](0025-ios-websocket-realtime-delivery.md) | iOS 实时投递：WebSocket 握手 + MESSAGE_DELIVERY | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
-| [0026](0026-server-direct-conversation-api.md) | 服务端 1:1 建会话 API | open | `ready-for-agent`, `p1` | 2026-07-21 |
+| [0026](0026-server-direct-conversation-api.md) | 服务端 1:1 建会话 API | complete | `done`, `p1` | 2026-07-21 |
 | [0027](0027-ios-image-media-send-display.md) | iOS 图片消息：上传 + 发送 + 展示 | open | `ready-for-agent`, `p1`, `blocked-by:0025` | 2026-07-21 |
 | [0028](0028-ios-push-token-silent-sync.md) | iOS 推送 Token 注册 + 静默唤醒触发 sync | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
 | [0029](0029-high-load-im-validation.md) | 高负载 IM 验证：实践手册、压测硬化、发送背压与 iOS 抗压方案 | complete | `done`, `p0` | 2026-07-26 |
@@ -35,3 +35,4 @@
 | [0031](0031-harden-load-test-chaos.md) | 压测与混沌演练硬化：stub、基线数字、chaos 04 注入 | complete | `done`, `p0` | 2026-07-26 |
 | [0032](0032-send-side-outbox-backpressure.md) | 发送侧背压：outbox pending 超阈返回 429 | complete | `done`, `p0` | 2026-07-26 |
 | [0033](0033-ios-high-load-client-design.md) | iOS 高负载/弱网客户端方案与坑点（文档先行） | complete | `done`, `p0` | 2026-07-26 |
+| [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | open | `ready-for-agent`, `p1` | 2026-07-26 |

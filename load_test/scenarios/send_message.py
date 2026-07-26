@@ -1,5 +1,5 @@
 """
-文本消息发送压测：用群会话 API 建会话，避免 psql 直写。
+文本消息发送压测：用 1:1 建会话 API 拿会话，避免 psql 直写与建群 workaround。
 """
 import time
 import httpx
@@ -21,27 +21,15 @@ class SendMessageScenario:
         user_a = await self.client.register_user(0)
         user_b = await self.client.register_user(1)
 
-        headers = {"Authorization": f"Bearer {user_a['token']}"}
         async with httpx.AsyncClient(timeout=15.0) as http:
             resp = await http.post(
-                f"{self.base_url}/v1/groups",
-                headers=headers,
-                json={"name": f"load-send-{int(time.time())}", "description": "send_message load"},
+                f"{self.base_url}/v1/conversations/direct",
+                headers={"Authorization": f"Bearer {user_a['token']}"},
+                json={"peer_user_id": user_b["user_id"]},
             )
-            if resp.status_code not in (200, 201):
-                raise RuntimeError(f"create group failed: {resp.status_code} {resp.text}")
-            data = resp.json()
-            group = data.get("group") or {}
-            group_id = group.get("id") or data.get("group_id")
-            self.conversation_id = data.get("conversation_id") or f"conv_grp_{group_id}"
-
-            add = await http.post(
-                f"{self.base_url}/v1/groups/{group_id}/members",
-                headers=headers,
-                json={"user_ids": [user_b["user_id"]]},
-            )
-            if add.status_code not in (200, 201, 204):
-                raise RuntimeError(f"add members failed: {add.status_code} {add.text}")
+            if resp.status_code != 200:
+                raise RuntimeError(f"create direct conversation failed: {resp.status_code} {resp.text}")
+            self.conversation_id = resp.json()["conversation_id"]
 
         # Round-robin virtual users over the two tokens
         half = max(1, count // 2)

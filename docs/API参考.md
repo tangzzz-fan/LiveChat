@@ -159,23 +159,50 @@ Retry-After: 5
 - 本地消息状态应停留在 `sending`（可重试），不要转成 `failed`（终态）。
 - 服务端配置：`SEND_BACKPRESSURE_PENDING_THRESHOLD`（默认 2000，`<=0` 关闭）、`SEND_BACKPRESSURE_RETRY_AFTER_SEC`（默认 5）、`SEND_BACKPRESSURE_SAMPLE_MS`（默认 2000）。对照演练见 [chaos 02](chaos/02-outbox-backpressure.md)。
 
-> **缺口（客户端需注意）**：当前 **没有** `POST /v1/conversations` 创建 1:1 私聊。可用：
-> 1. 建群 `POST /v1/groups`（返回 `conversation_id`）作为多人/双人会话；或  
-> 2. 开发环境手工插入 `conversations` + `conversation_members`（见测试辅助）。
+会话来源：1:1 用 [`POST /v1/conversations/direct`](#32-post-v1conversationsdirect)，群用 `POST /v1/groups`。
 
-### 3.2 `GET /v1/conversations`
+### 3.2 `POST /v1/conversations/direct`
+
+创建或获取与某个用户的 1:1 会话。**幂等**：同一对用户永远对应同一个会话，从哪一侧调用都一样。
+
+```json
+{ "peer_user_id": 1136 }
+```
+
+成功 `200`：
+
+```json
+{
+  "conversation_id": "conv_dm_1135_1136",
+  "type": "direct",
+  "peer_user_id": 1136,
+  "created": true
+}
+```
+
+| 约束 | 说明 |
+|------|------|
+| 会话 ID | 由**排序后的用户对推导**：`conv_dm_<小 id>_<大 id>`，与群会话的 `conv_grp_` 前缀区分 |
+| 幂等 | 重复调用返回同一 `conversation_id`，`created=false` |
+| 顺序无关 | A→B 与 B→A 得到同一会话，不会各建一条 |
+| `created` | `true` 表示本次调用创建了会话；客户端可用它区分首次打开与重放 |
+| 自己 | `peer_user_id` 等于自己 → `400` |
+| 未知用户 | peer 不存在 → `404` |
+| 会话列表可见性 | 只为**调用方**写入摘要行；对端要等第一条消息才出现在其会话列表（与建群行为一致） |
+
+### 3.3 `GET /v1/conversations`
 
 Query：`limit`（默认 50）、`offset`。
 
 返回会话摘要列表（投影表 `conversation_summaries`）。
 
-### 3.3 `GET /v1/conversations/{cid}/messages`
+### 3.4 `GET /v1/conversations/{cid}/messages`
 
 Query：`from_seq`（默认 0）、`limit`（默认 50，最大 100）。
 
 按 `conversation_seq` 升序补拉历史；非成员 → `403`。
 
-### 3.4 `GET /v1/sync/events`
+### 3.5 `GET /v1/sync/events`
 
 Query：`cursor`（上次已消费的 `event_seq`，默认 0）、`limit`（默认 100，最大 200）。
 
