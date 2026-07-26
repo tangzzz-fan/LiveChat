@@ -6,8 +6,8 @@ Phase 3 P0 交付物：6 个典型故障场景的演练手册 + 注入/恢复脚
 
 | 编号 | 场景 | 手册 | 风险等级 |
 |------|------|------|----------|
-| 01 | Redis 不可用 | [手册](01-redis-outage.md) | 低 |
-| 02 | Outbox Consumer 堵塞 | [手册](02-outbox-backpressure.md) | 低 |
+| 01 | Redis 不可用 | [手册](01-redis-outage.md) ✅ 有实测复盘 | 低 |
+| 02 | Outbox Consumer 堵塞 | [手册](02-outbox-backpressure.md) ✅ 有实测复盘（含背压对照） | 低 |
 | 03 | DB 主库宕机（模拟） | [手册](03-db-primary-failover.md) | 中 |
 | 04 | 推送服务延迟/不可用 | [手册](04-push-delay.md) | 低 |
 | 05 | 单网关节点宕机 | [手册](05-gateway-pod-failure.md) | 中 |
@@ -20,6 +20,11 @@ Phase 3 P0 交付物：6 个典型故障场景的演练手册 + 注入/恢复脚
 ## 首次演练推荐
 
 从 `01-redis-outage` 开始——它最可控、不涉及数据丢失、恢复最快。
+
+## 演练前的两个前提
+
+1. **先 `make build` 再运行二进制**。`go run` 启动的进程名是临时文件，`outbox-pause.sh` / `health-check.sh` 的 `pgrep -x` 匹配不到。
+2. **需要 token 的场景先把 token 拿好**。例如 Redis 中断期间 `request_code` 会 500，事后无法登录。
 
 ## 注入/恢复脚本
 

@@ -61,3 +61,5 @@ deploy/grafana/data/
 # Load test
 load_test/.venv/
 load_test/baselines/baseline-*.md
+
+.venv/

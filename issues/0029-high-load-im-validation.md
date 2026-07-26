@@ -1,8 +1,8 @@
 ---
 id: "0029"
 title: "高负载 IM 验证：实践手册、压测硬化、发送背压与 iOS 抗压方案"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: null
 blocked_by: []
 created_at: 2026-07-26
@@ -29,11 +29,11 @@ created_at: 2026-07-26
 
 ## Acceptance criteria
 
-- [ ] 子票 0030、0031、0032、0033 均 `complete`
-- [ ] `docs/高负载IM验证计划.md` 与子票状态一致
-- [ ] 学习型门禁达成：五场景绿 + 填数基线 + ≥2 chaos 复盘；**不**要求打满 Spec 01 数字
-- [ ] CLAUDE.md 或架构总览注明「容量验证 = 本地放大因子实证，非 20万连接」
-- [ ] 达标后打 annotated tag（建议 `v0.x.0-high-load-validation` 或与仓库 tag 约定对齐）
+- [x] 子票 0030、0031、0032、0033 均 `complete`
+- [x] `docs/高负载IM验证计划.md` 与子票状态一致
+- [x] 学习型门禁达成：五场景绿 + [填数基线](../load_test/baselines/local-measured-baseline.md) + 2 份 chaos 实测复盘（[01 Redis](../docs/chaos/01-redis-outage.md)、[02 Outbox 背压对照](../docs/chaos/02-outbox-backpressure.md)）
+- [x] [架构总览 §4.0](../docs/架构设计总览.md) 注明容量验证口径 = 本地放大因子实证，非 20 万连接
+- [x] 打 annotated tag `v0.3.0-high-load-validation`
 
 ## Blocked by
 
@@ -55,3 +55,23 @@ None — 子票可按依赖并行启动。
 - 本地单机无法实证 Spec 01 峰值；验收看「放大因子与降级语义」而非绝对 QPS。
 - 负载源 = Python `load_test/`；iOS 不做容量打压。
 - 与 0019/0020 的关系：补齐 stub、基线数字与缺失注入，而非推倒重来。
+
+## 验收记录（2026-07-26）
+
+**三个实测结论**
+
+1. 本机最先撞到的天花板是 Gateway 接入限流（每 IP 5 conn/s），不是数据库。单 IP 压测不能外推连接容量。
+2. 重连 jitter 直接决定恢复成功率：500ms jitter 下 2/10 成功，无 jitter 0/10 全被拒。
+3. 发送侧背压把积压封了顶：暂停 consumer 后 95.2% 的 send 返回 429，pending 停在 88 而非无限增长，恢复后自动放行。
+
+**演练暴露的工具链问题（已修）**
+
+- `outbox-pause.sh` 用 `pgrep -f` 停到 shell 包装进程，演练无效 → 改 `pgrep -x`。
+- `health-check.sh` 的 `check()` 把标签当命令执行，7 项检查全部误报 → 已修并加入背压指标。
+- `connect` / `send_message` / `sync_backfill` 每次迭代注册新用户，撞 OTP 频控产生假错误 → 改为预建用户池复用。
+
+**遗留（不阻塞本票）**
+
+- `load_test` 的 WS 握手帧是 JSON 占位，网关要求 protobuf（`expected HANDSHAKE_REQ`），因此握手之后的行为（含 Redis 中断时路由注册是否被拒）未覆盖。
+- 客户端 429 退避实现属 iOS 侧（0022–0028）。
+- 多机压测缺失，单 IP 无法绕过接入限流。
