@@ -32,6 +32,6 @@
 | [0028](0028-ios-push-token-silent-sync.md) | iOS 推送 Token 注册 + 静默唤醒触发 sync | open | `ready-for-agent`, `p1`, `blocked-by:0024` | 2026-07-21 |
 | [0029](0029-high-load-im-validation.md) | 高负载 IM 验证：实践手册、压测硬化、发送背压与 iOS 抗压方案 | open | `ready-for-agent`, `p0` | 2026-07-26 |
 | [0030](0030-load-practice-playbook.md) | 高负载业界实践模拟手册（load-practice） | complete | `done`, `p0` | 2026-07-26 |
-| [0031](0031-harden-load-test-chaos.md) | 压测与混沌演练硬化：stub、基线数字、chaos 04 注入 | open | `ready-for-agent`, `p0`, `in-progress` | 2026-07-26 |
+| [0031](0031-harden-load-test-chaos.md) | 压测与混沌演练硬化：stub、基线数字、chaos 04 注入 | complete | `done`, `p0` | 2026-07-26 |
 | [0032](0032-send-side-outbox-backpressure.md) | 发送侧背压：outbox pending 超阈返回 429 | open | `ready-for-agent`, `p0`, `blocked-by:0031` | 2026-07-26 |
 | [0033](0033-ios-high-load-client-design.md) | iOS 高负载/弱网客户端方案与坑点（文档先行） | complete | `done`, `p0` | 2026-07-26 |

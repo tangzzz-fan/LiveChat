@@ -44,6 +44,17 @@ python run.py --scenario reconnect_storm --concurrency 50 --duration 20 --no-jit
 | Redis 路由写 QPS | 风暴窗口内尖峰 |
 | `:8081/metrics` | 连接相关计数抖动 |
 
+### 本机实测（2026-07-26，`95e3d15`，并发 10）
+
+| 配置 | 风暴重连成功 | 耗时 |
+|------|--------------|------|
+| `--jitter-ms 500` | 2/10 | 0.50s |
+| `--no-jitter` | **0/10** | 0.01s |
+
+限流为每 IP 5 conn/s、每用户 2 conn/s，因此同一瞬间齐发会被全部拒绝。完整数字见 [`baselines/local-measured-baseline.md`](../../load_test/baselines/local-measured-baseline.md)。
+
+注意：`reconnect_storm` 的风暴在 `setup()` 一次性测量，报告里的 `rps/P50` 不是业务吞吐。
+
 ## 6. 通过标准
 
 - 限流生效时系统可恢复，非持续 5xx 雪崩  

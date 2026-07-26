@@ -58,3 +58,6 @@ deploy/prometheus/data/
 deploy/grafana/data/
 .claude/
 .agents/
+# Load test
+load_test/.venv/
+load_test/baselines/baseline-*.md

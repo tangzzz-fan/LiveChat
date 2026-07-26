@@ -17,12 +17,17 @@
 
 1. 本机 PostgreSQL + Redis 已启动  
 2. `make migrate-up`（在 `livechat-server/`）  
-3. 分别启动 message-service / gateway / outbox-consumer  
-4. `cd load_test && pip install -r requirements.txt`（若尚未安装）
+3. 分别启动 message-service / gateway / outbox-consumer（建议先 `make build` 再跑二进制，避免 `go run` 被终端回收）  
+4. 压测依赖装在虚拟环境里：
 
 ```bash
-# 快速烟雾（五场景；部分仍 stub 时见 0031）
-cd load_test && python run.py --quick --all
+cd load_test
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+```bash
+# 快速烟雾（五场景）
+cd load_test && .venv/bin/python run.py --quick --all
 
 # 指标
 curl -s http://localhost:8080/metrics | head
@@ -41,3 +46,12 @@ curl -s http://localhost:8082/metrics | grep outbox
 - 行为符合该场景「预期系统行为」，指标方向正确  
 - 恢复后 `bash livechat-server/scripts/chaos/health-check.sh` 通过（适用 chaos 场景）  
 - **不**以 Spec 01 绝对数字为门禁  
+
+## 本机实测基线
+
+已跑通五场景，数字与关键观察见 [`load_test/baselines/local-measured-baseline.md`](../../load_test/baselines/local-measured-baseline.md)。
+
+两个必读结论：
+
+1. 单机压测最先撞到 **Gateway 接入限流（每 IP 5 conn/s）**，`connect` 的 98.9% 属 admission-limited 而非故障。  
+2. 重连 jitter 直接决定恢复成功率（500ms jitter 下 2/10，无 jitter 0/10）。  
