@@ -1,5 +1,9 @@
 # LiveChat Server — 操作说明
 
+> **学习入口（Go 基础复盘）**：仓库 [`docs/Go后端技术栈与学习导读.md`](../docs/Go后端技术栈与学习导读.md)  
+> **实现决策（为何这样写）**：[`docs/technical-decisions.md`](./docs/technical-decisions.md)  
+> **构建与启动细则**：[`docs/build-and-test.md`](./docs/build-and-test.md)
+
 ## 环境要求
 
 | 组件 | 版本 | 说明 |
