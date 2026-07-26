@@ -50,6 +50,8 @@ Infra 后台队列           Middleware → UseCase → 写 DB，再观察投影
 桥接：`ValueObservation`（去抖 16–33ms）→ 投影变更 →（可选）`dispatch` 进 Store。  
 **反模式**：根 State 塞整会话；WS 每帧 dispatch；Reducer 内 DB/网络。
 
+**Feature 分拆（0039）**：`AppAction` 只做 `.auth` / `.chat` 包装；各 Feature 自有 State/Action/Reducer/Middleware/Views，用 `combineReducers` + `pullback` 组装。新增能力先开 `Features/<Name>/`，不要继续膨胀单文件。
+
 ## 4. WebSocket：对比结论与落点
 
 | | URLSessionWebSocketTask | Starscream | NWConnection+WS |

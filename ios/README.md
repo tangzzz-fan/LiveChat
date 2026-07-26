@@ -73,8 +73,21 @@ xcrun simctl launch booted com.tango.LiveChat
 
 - [0036](../issues/0036-ios-rewrite-design.md) / [0037](../issues/0037-ios-spm-scaffold.md) ✅  
 - [0038](../issues/0038-ios-auth-otp-keychain-login.md) OTP 登录 ✅  
-- **当前 frontier**：[0039](../issues/0039-ios-local-first-send-direct.md) 本地优先发送  
-- 后续：0040 → 0041 → 0042（见 [0035](../issues/0035-ios-client-rewrite.md)）
+- [0039](../issues/0039-ios-local-first-send-direct.md) 本地优先发送 ✅  
+- **当前 frontier**：[0040](../issues/0040-ios-incremental-sync.md) 增量 sync  
+- 后续：0041 → 0042（见 [0035](../issues/0035-ios-client-rewrite.md)）
+
+### Redux 模块边界
+
+```text
+AppState { auth, chat }
+AppAction { .auth(AuthAction), .chat(ChatAction) }
+Features/Auth/   state + reducer + middleware + LoginView
+Features/Chat/   state + reducer + middleware + list/thread views
+App/AppStore.swift  combineReducers + pullback + factory
+```
+
+禁止把新 Feature 的 Action 继续塞进单一巨型文件；新增能力先开 Feature 目录。
 
 ## 边界提醒
 

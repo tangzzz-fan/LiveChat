@@ -1,16 +1,9 @@
 import Foundation
 
-public struct APIConfig: Sendable {
-    public var baseURL: URL
-
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:8080")!) {
-        self.baseURL = baseURL
-    }
-}
-
 public enum HTTPClientError: Error, Sendable, LocalizedError {
     case invalidResponse
     case status(code: Int, body: String)
+    case rateLimited(retryAfter: TimeInterval, body: String)
     case decoding(Error)
 
     public var errorDescription: String? {
@@ -19,9 +12,19 @@ public enum HTTPClientError: Error, Sendable, LocalizedError {
             return "Invalid HTTP response"
         case .status(let code, let body):
             return "HTTP \(code): \(body)"
+        case .rateLimited(let retryAfter, _):
+            return "HTTP 429 retry after \(Int(retryAfter))s"
         case .decoding(let error):
             return "Decode failed: \(error.localizedDescription)"
         }
+    }
+}
+
+public struct APIConfig: Sendable {
+    public var baseURL: URL
+
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:8080")!) {
+        self.baseURL = baseURL
     }
 }
 
@@ -43,7 +46,7 @@ public final class HTTPClient: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let bearerToken {
-            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: Authorization)
+            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }
         request.httpBody = try JSONEncoder().encode(body)
         return try await send(request)
@@ -51,20 +54,33 @@ public final class HTTPClient: Sendable {
 
     public func getJSON<Response: Decodable>(
         path: String,
-        bearerToken: String
+        bearerToken: String,
+        query: [URLQueryItem] = []
     ) async throws -> Response {
-        var request = URLRequest(url: config.baseURL.appending(path: path))
+        var components = URLComponents(
+            url: config.baseURL.appending(path: path),
+            resolvingAgainstBaseURL: false
+        )!
+        if !query.isEmpty {
+            components.queryItems = query
+        }
+        var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         return try await send(request)
     }
 
-    private let Authorization = "Authorization"
-
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw HTTPClientError.invalidResponse
+        }
+        if http.statusCode == 429 {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let header = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            let fromJSON = (try? JSONDecoder().decode(RetryAfterBody.self, from: data))?.retry_after_sec
+            let retryAfter = TimeInterval(fromJSON ?? Int(header ?? 5))
+            throw HTTPClientError.rateLimited(retryAfter: retryAfter, body: body)
         }
         guard (200..<300).contains(http.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
@@ -76,6 +92,10 @@ public final class HTTPClient: Sendable {
             throw HTTPClientError.decoding(error)
         }
     }
+}
+
+private struct RetryAfterBody: Decodable {
+    let retry_after_sec: Int?
 }
 
 private extension URL {

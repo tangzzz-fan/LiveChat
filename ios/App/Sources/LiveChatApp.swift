@@ -3,7 +3,6 @@ import Foundation
 import TGReduxKit
 import ChatPresentation
 import ChatApplication
-import ChatInfrastructure
 
 typealias StoreOfApp = Store<AppState, AppAction>
 
@@ -22,9 +21,7 @@ struct LiveChatApp: App {
         WindowGroup {
             RootView()
                 .provideStore(store)
-                .task {
-                    store.dispatch(.bootstrap)
-                }
+                .task { store.dispatch(.auth(.bootstrap)) }
         }
     }
 }
@@ -35,7 +32,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if store.state.isLoggedIn {
-                LoggedInHomeView()
+                HomeView()
             } else {
                 LoginView()
             }

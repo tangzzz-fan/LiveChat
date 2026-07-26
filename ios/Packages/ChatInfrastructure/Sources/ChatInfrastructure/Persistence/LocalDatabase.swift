@@ -22,6 +22,18 @@ public final class LocalDatabase: Sendable {
         try LocalDatabase(path: ":memory:")
     }
 
+    public static func applicationDefault() throws -> LocalDatabase {
+        let fm = FileManager.default
+        let base = try fm.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ).appendingPathComponent("LiveChat", isDirectory: true)
+        try fm.createDirectory(at: base, withIntermediateDirectories: true)
+        return try LocalDatabase(path: base.appendingPathComponent("chat.sqlite").path)
+    }
+
     private func migrate() throws {
         var migrator = DatabaseMigrator()
 

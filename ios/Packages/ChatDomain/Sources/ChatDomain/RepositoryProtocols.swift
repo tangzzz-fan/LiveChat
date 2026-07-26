@@ -31,6 +31,18 @@ public struct SendMessageResponse: Codable, Sendable {
     public let conversationSeq: Int64
     public let isDuplicate: Bool
     public let serverReceivedAtMs: Int64
+
+    public init(
+        serverMessageID: String,
+        conversationSeq: Int64,
+        isDuplicate: Bool,
+        serverReceivedAtMs: Int64
+    ) {
+        self.serverMessageID = serverMessageID
+        self.conversationSeq = conversationSeq
+        self.isDuplicate = isDuplicate
+        self.serverReceivedAtMs = serverReceivedAtMs
+    }
 }
 
 public protocol ConversationRepository: Sendable {
