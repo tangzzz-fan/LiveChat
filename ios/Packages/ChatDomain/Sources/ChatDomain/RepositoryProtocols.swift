@@ -73,6 +73,11 @@ public protocol AuthRepository: Sendable {
 public struct CodeRequestResponse: Codable, Sendable {
     public let retryAfterSec: Int
     public let expiresInSec: Int
+
+    public init(retryAfterSec: Int, expiresInSec: Int) {
+        self.retryAfterSec = retryAfterSec
+        self.expiresInSec = expiresInSec
+    }
 }
 
 public struct AuthTokens: Codable, Sendable {
@@ -80,6 +85,13 @@ public struct AuthTokens: Codable, Sendable {
     public let refreshToken: String
     public let userID: Int64
     public let expiresIn: Int64
+
+    public init(accessToken: String, refreshToken: String, userID: Int64, expiresIn: Int64) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.userID = userID
+        self.expiresIn = expiresIn
+    }
 }
 
 public protocol PushRepository: Sendable {

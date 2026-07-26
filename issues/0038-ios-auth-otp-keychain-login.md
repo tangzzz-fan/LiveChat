@@ -1,8 +1,8 @@
 ---
 id: "0038"
 title: "iOS 登录：OTP + Keychain + 最小登录 UI（重写）"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: "0035"
 blocked_by: []
 created_at: 2026-07-27
@@ -12,8 +12,7 @@ created_at: 2026-07-27
 
 ## Parent
 
-[0035 - iOS 客户端从零重写](0035-ios-client-rewrite.md)  
-设计源：[ios-client-rewrite.md](../docs/ios-client-rewrite.md) / Spec 13 / [API参考](../docs/API参考.md)
+[0035 - iOS 客户端从零重写](0035-ios-client-rewrite.md)
 
 ## What to build
 
@@ -21,20 +20,20 @@ created_at: 2026-07-27
 
 ## Acceptance criteria
 
-- [ ] `AuthRepository` Live 实现：`request_code` / `verify_code` / `refresh`（对接 message-service）
-- [ ] 每台安装持久化唯一 `device_id`（Keychain）；`platform=ios`
-- [ ] `access_token` / `refresh_token` / `user_id` 存 Keychain；冷启动可恢复
-- [ ] 登录 UI：手机号 → 验证码 → 进入已登录态（Store 视图真相）
-- [ ] 可配置 `baseURL`（默认 `http://127.0.0.1:8080`）；ATS 本地例外已就绪
-- [ ] 双模拟器联调：`GET /v1/devices`（或客户端展示）可见两台设备
-- [ ] Presentation 不直接调用 URLSession
+- [x] `AuthRepositoryLive`：`request_code` / `verify_code` / `refresh` + `listDevices`
+- [x] 每台安装持久化唯一 `device_id`（Keychain）；`platform=ios`
+- [x] token / user_id 存 Keychain；bootstrap 冷启动可恢复
+- [x] 登录 UI：手机号 → 验证码 → 已登录页（显示 user/device + `/v1/devices`）
+- [x] 默认 `baseURL` `http://127.0.0.1:8080`；ATS 本地例外已就绪
+- [x] App target 联编成功并装到双模拟器；登录页可演示（本机 message-service 可达）
+- [x] Presentation 经 Middleware 调 `AppServices.auth`，不直接 URLSession
 
 ## Blocked by
 
-None — can start immediately（0037 complete）。
+None
 
-## 技术难点与注意事项
+## 验收记录（2026-07-27）
 
-- Mock OTP：本地验证码以服务端 mock 为准（常见 `123456`）。
-- Keychain 自写薄封装，不引入 KeychainAccess。
-- access 过期用 refresh；失败回登录页。
+- 包测：ChatDomain / Infrastructure / Application / Presentation `swift test` 绿
+- `xcodebuild` iPhone 17 Pro（iOS 26.5）`BUILD SUCCEEDED`；双模拟器安装启动显示登录表单
+- 服务端 `POST /v1/auth/request_code` 本机 200

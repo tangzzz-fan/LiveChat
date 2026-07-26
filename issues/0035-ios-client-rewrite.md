@@ -46,7 +46,7 @@ None — 子票可立即启动。
 |----|------|------|
 | [0036](0036-ios-rewrite-design.md) | 设计落入 Spec + 决策文档 | complete |
 | [0037](0037-ios-spm-scaffold.md) | SPM 脚手架 + Xcode 工程 | complete |
-| [0038](0038-ios-auth-otp-keychain-login.md) | OTP 登录 + Keychain | open |
+| [0038](0038-ios-auth-otp-keychain-login.md) | OTP 登录 + Keychain | complete |
 | [0039](0039-ios-local-first-send-direct.md) | 本地优先发文本 + 1:1 | open |
 | [0040](0040-ios-incremental-sync.md) | 增量 sync | open |
 | [0041](0041-ios-websocket-realtime.md) | WS 实时投递 | open |
