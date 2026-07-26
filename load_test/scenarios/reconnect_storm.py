@@ -30,7 +30,7 @@ class ReconnectStormScenario:
         self.connections = []
         for u in self.users:
             try:
-                ws = await self.client.connect_ws(u["token"])
+                ws = await self.client.connect_ws(u["token"], u["device_id"], heartbeat=False)
                 self.connections.append(ws)
             except Exception:
                 self.connections.append(None)
@@ -65,7 +65,7 @@ class ReconnectStormScenario:
         if not self.no_jitter and self.jitter_ms > 0:
             await asyncio.sleep(random.uniform(0, self.jitter_ms / 1000.0))
         try:
-            ws = await self.client.connect_ws(user["token"])
+            ws = await self.client.connect_ws(user["token"], user["device_id"], heartbeat=False)
             self.connections.append(ws)
             return True
         except Exception:

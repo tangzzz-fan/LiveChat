@@ -60,20 +60,38 @@ curl -s -X POST http://localhost:8080/v1/auth/request_code \
 | 注入中 | `/health` | `status=degraded`，`redis: connection refused` |
 | 注入中 | `POST /v1/auth/request_code` | **500**（验证码存储依赖 Redis） |
 | 注入中 | `POST /v1/messages/send` ×3 | **全部 200**（messages + outbox 只依赖 Postgres） |
-| 注入中 | WebSocket HTTP upgrade | **成功**（见下方偏差） |
+| 注入中 | WebSocket upgrade + **protobuf 握手** | **都成功**（见下方偏差） |
+| 注入中 | 既有连接的实时投递 | **收不到**（Fanout 无法解析路由） |
 | 恢复后 | `/health` / `request_code` | `ok` / 200 |
 | 恢复后 | `GET /v1/conversations/{cid}/messages` | **3/3 条消息可补拉**，seq 1,2,3 连续 |
 | 恢复后 | `health-check.sh` | All checks passed |
 
 结论：**消息可达性不依赖 Redis**。Redis 影响的是「实时投递与登录」，不是「消息是否存在」。
 
-### 与预期行为的一处偏差（值得记住）
+### 与预期行为的偏差（重要，已用真握手客户端验证）
 
-手册原先写「Gateway 不再能注册新连接的路由（握手可能失败）」。实测 **HTTP upgrade 依然成功**：升级发生在应用层握手之前，不碰 Redis。也就是说客户端可能握着一条**自认在线、但对 Fanout 不可见**的连接——静默降级比直接失败更难排查。
+手册原先写「Gateway 不再能注册新连接的路由（握手可能失败）」。实测**握手照样成功**：
 
-客户端启示：不要把「WebSocket 连上了」当作在线判据，应以应用层握手响应为准，并在缺失时回退到 sync 轮询。
+```
+中断期间：新连接 HANDSHAKE SUCCEEDED session_id=1160:load-test-dev-1-35446
+中断期间：既有连接 NO DELIVERY within 8s
+```
 
-未验证部分：应用层握手在 Redis 中断时是否被拒——`load_test` 的握手帧是 JSON 占位，网关要求 protobuf（返回 `expected HANDSHAKE_REQ`），因此本轮无法覆盖握手之后的行为。需要 protobuf 客户端才能补上。
+也就是说客户端会握着一条**握手成功、心跳正常、但收不到任何投递**的连接。路由注册失败不会反馈给客户端，静默降级比直接失败更难排查。
+
+**客户端启示（对 iOS 尤其重要）**：
+
+- 「握手成功」不等于「在线可达」。不要只靠握手结果判定在线。
+- 需要一个独立的活性判据：例如收不到预期投递时按 sync 游标兜底轮询，或让服务端在路由注册失败时主动下发降级信号（当前**没有**这个信号，属开放缺口）。
+- 恢复靠重连即可：Redis 回来后重连握手 → 投递立刻恢复，中断期间的消息全部可补拉。
+
+复现：`cd load_test && .venv/bin/python drills/chaos01_redis_outage.py`（自动完成注入与恢复）。
+
+### 顺带发现：握手里的 `device_id` 被忽略
+
+`HandshakeRequest.device_id` 在服务端**未被使用**，session 身份完全取自 JWT claims（`internal/gateway/manager.go`：`deviceID := claims.DeviceID`）。演练中用不同 `device_id` 发起的新连接拿到了同一个 `session_id`，因而顶掉了原连接。
+
+含义：一个 token 只能对应一条连接，客户端无法靠握手字段区分多设备；换设备必须换 token。
 
 ## 验收标准
 

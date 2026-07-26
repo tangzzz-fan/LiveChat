@@ -61,5 +61,7 @@ deploy/grafana/data/
 # Load test
 load_test/.venv/
 load_test/baselines/baseline-*.md
+load_test/core/gen/
+load_test/**/__pycache__/
 
 .venv/

@@ -38,6 +38,11 @@ def _load():
         SCENARIOS["reconnect_storm"] = ReconnectStormScenario
     except ImportError:
         pass
+    try:
+        from scenarios.realtime_delivery import RealtimeDeliveryScenario
+        SCENARIOS["realtime_delivery"] = RealtimeDeliveryScenario
+    except ImportError:
+        pass
 
 _load()
 

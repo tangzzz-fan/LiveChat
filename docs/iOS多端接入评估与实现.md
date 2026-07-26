@@ -188,7 +188,7 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 2. **[0023](../../issues/0023-ios-local-first-send-grdb-http.md)** HTTP Message/Sync 前的发送 + GRDB 投影  
 3. **[0024](../../issues/0024-ios-incremental-sync-executor.md)** WebSocket 前的增量同步  
 4. **[0025](../../issues/0025-ios-websocket-realtime-delivery.md)** WebSocketRepository（Protobuf 握手 + 投递）  
-5. ~~**[0026](../../issues/0026-server-direct-conversation-api.md)** 服务端 `direct` 建会话~~ ✅ 已完成  
+5. **[0026](../../issues/0026-server-direct-conversation-api.md)** 服务端 `direct` 建会话 ✅ 已完成  
 6. **[0027](../../issues/0027-ios-image-media-send-display.md)** 图片消息  
 7. **[0028](../../issues/0028-ios-push-token-silent-sync.md)** 推送 token + 静默 sync  
 

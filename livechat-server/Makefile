@@ -1,4 +1,4 @@
-.PHONY: dev dev-down migrate-up migrate-down proto build test cleanup-sync-events
+.PHONY: dev dev-down migrate-up migrate-down proto loadtest-proto build test cleanup-sync-events
 
 # ── Docker ───────────────────────────────────────────
 dev:
@@ -18,6 +18,10 @@ migrate-down:
 # ── Proto ────────────────────────────────────────────
 proto:
 	buf generate proto
+
+# 压测客户端的 Python 绑定；协议变更后必须重跑，否则压测会静默失效
+loadtest-proto:
+	cd ../load_test && ./gen_proto.sh
 
 # ── Build ────────────────────────────────────────────
 build:

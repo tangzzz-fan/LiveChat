@@ -1,12 +1,12 @@
 """
 HTTP + WebSocket 客户端封装
 """
-import asyncio
 import json
-import struct
 import time
 import httpx
 import websockets
+
+from core.ws_protocol import connect_and_handshake
 
 
 class ChatClient:
@@ -82,23 +82,24 @@ class ChatClient:
             raise Exception(f"sync_events failed: {resp.status_code} {resp.text}")
         return resp.json()
 
-    async def connect_ws(self, token: str, device_id: str = "load-test"):
+    async def connect_ws(self, token: str, device_id: str = "load-test", heartbeat: bool = True):
+        """Open a WebSocket and complete the real protobuf handshake.
+
+        Returns a WsSession that is actually routable (i.e. fanout can reach
+        it). Raises HandshakeRejected when the gateway refuses the handshake —
+        that is a different failure from the upgrade itself failing.
         """
-        Open WebSocket (true upgrade). Sends a best-effort framed handshake;
-        upgrade success is the primary load signal for connect scenario.
+        return await connect_and_handshake(
+            self.ws_url, token, device_id, heartbeat=heartbeat
+        )
+
+    async def upgrade_only(self, token: str, device_id: str = "load-test"):
+        """Open the WebSocket without the app-level handshake.
+
+        Kept because the upgrade is a meaningful load signal on its own: it is
+        the layer that admission control (per-IP limiting) applies to.
         """
-        ws = await websockets.connect(self.ws_url)
-        payload = json.dumps({
-            "access_token": token,
-            "device_id": device_id,
-            "protocol_version": 1,
-        }).encode("utf-8")
-        frame = struct.pack(">HI", 1, len(payload)) + payload
-        try:
-            await asyncio.wait_for(ws.send(frame), timeout=2.0)
-        except Exception:
-            pass
-        return ws
+        return await websockets.connect(self.ws_url)
 
 
 async def _test():

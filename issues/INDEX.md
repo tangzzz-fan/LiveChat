@@ -35,4 +35,4 @@
 | [0031](0031-harden-load-test-chaos.md) | 压测与混沌演练硬化：stub、基线数字、chaos 04 注入 | complete | `done`, `p0` | 2026-07-26 |
 | [0032](0032-send-side-outbox-backpressure.md) | 发送侧背压：outbox pending 超阈返回 429 | complete | `done`, `p0` | 2026-07-26 |
 | [0033](0033-ios-high-load-client-design.md) | iOS 高负载/弱网客户端方案与坑点（文档先行） | complete | `done`, `p0` | 2026-07-26 |
-| [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | open | `ready-for-agent`, `p1` | 2026-07-26 |
+| [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | complete | `done`, `p1` | 2026-07-26 |
