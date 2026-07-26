@@ -186,10 +186,12 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 **旧 0022–0025 / 0027–0028 已作废。** 当前路径：
 
 1. **[0035](../issues/0035-ios-client-rewrite.md)** 父票：从零重写  
-2. **[0036](../issues/0036-ios-rewrite-design.md)** 设计 ✅ → [`docs/ios-client-rewrite.md`](./ios-client-rewrite.md) + Spec 13 修订  
-3. **[0037](../issues/0037-ios-spm-scaffold.md)** SPM 脚手架（**需你创建 Xcode 工程**）  
-4. 0037 后再拆功能垂直切片（登录 / 发送 / sync / WS / 推送）
+2. **[0036](../issues/0036-ios-rewrite-design.md)** 设计 ✅ → [`docs/ios-client-rewrite.md`](./ios-client-rewrite.md)  
+3. **[0037](../issues/0037-ios-spm-scaffold.md)** SPM + Xcode ✅  
+4. **[0038](../issues/0038-ios-auth-otp-keychain-login.md)** OTP 登录 ← **当前 frontier**  
+5. **[0039](../issues/0039-ios-local-first-send-direct.md)** 本地优先发送 + 1:1  
+6. **[0040](../issues/0040-ios-incremental-sync.md)** 增量 sync  
+7. **[0041](../issues/0041-ios-websocket-realtime.md)** WS 实时  
+8. **[0042](../issues/0042-ios-push-token-silent-sync.md)** Push + 静默 sync  
 
-决策要点：GRDB 数据真相 + TGReduxKit 视图真相；`WebSocketTransport` 默认原生 WS；前台长连、后台 APNs 唤醒。高负载横切见 [`ios-high-load-client.md`](./ios-high-load-client.md)。
-
-服务端 1:1 会话 API（[0026](../issues/0026-server-direct-conversation-api.md)）已就绪。
+图片消息本轮不拆。高负载横切见 [`ios-high-load-client.md`](./ios-high-load-client.md)。

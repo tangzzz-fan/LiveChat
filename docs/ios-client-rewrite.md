@@ -101,6 +101,5 @@ Agent 侧负责：清空旧 `ios/`、写好各 package 的 `Package.swift` 与�
 |----|------|
 | [0035](../issues/0035-ios-client-rewrite.md) | 父票 |
 | [0036](../issues/0036-ios-rewrite-design.md) | 本决策落入 Spec + 本文 |
-| [0037](../issues/0037-ios-spm-scaffold.md) | 脚手架（含你建 Xcode 工程） |
-
-功能垂直切片（登录 / 发送 / sync / WS / 推送）在 0037 完成后按 Spec 13 重新拆票，不再沿用 0022–0028。
+| [0037](../issues/0037-ios-spm-scaffold.md) | 脚手架 ✅ |
+| [0038](../issues/0038-ios-auth-otp-keychain-login.md)–[0042](../issues/0042-ios-push-token-silent-sync.md) | 登录 → 发送 → sync → WS → Push |

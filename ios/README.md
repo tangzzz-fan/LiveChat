@@ -69,6 +69,12 @@ xcrun simctl install booted "$APP"
 xcrun simctl launch booted com.tango.LiveChat
 ```
 
+## 状态
+
+- [0036](../issues/0036-ios-rewrite-design.md) / [0037](../issues/0037-ios-spm-scaffold.md) ✅  
+- **当前 frontier**：[0038](../issues/0038-ios-auth-otp-keychain-login.md) OTP 登录  
+- 后续：0039 → 0040 → 0041 → 0042（见 [0035](../issues/0035-ios-client-rewrite.md)）
+
 ## 边界提醒
 
 - Store 只放视图真相；消息全量在 GRDB  
