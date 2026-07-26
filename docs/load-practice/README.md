@@ -36,9 +36,10 @@ curl -s http://localhost:8082/metrics | grep outbox
 
 ## 与其他文档的关系
 
+- **方法论总纲（复盘 / 对外讲述）**：[`../验证链路设计方法论.md`](../验证链路设计方法论.md)
 - 概念与缺口总览：[`../engineering-problems/15-high-concurrency-failure-modes.md`](../engineering-problems/15-high-concurrency-failure-modes.md)
 - 故障注入细则：[`../chaos/`](../chaos/)
-- 推进计划与票：[`../高负载IM验证计划.md`](../高负载IM验证计划.md) · issues `0030`–`0033`
+- 推进计划与票：[`../高负载IM验证计划.md`](../高负载IM验证计划.md) · issues `0030`–`0034`
 - iOS 客户端抗压（非容量打压）：[`../ios-high-load-client.md`](../ios-high-load-client.md)（0033）
 
 ## 统一通过标准（学习型）

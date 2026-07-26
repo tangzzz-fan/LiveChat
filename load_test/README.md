@@ -2,6 +2,10 @@
 
 基于 Python asyncio 的压测框架，覆盖 6 个核心场景。
 
+**先理解「为什么这样测」**：[`docs/验证链路设计方法论.md`](../docs/验证链路设计方法论.md)。  
+**操作手册**：[`docs/load-practice/`](../docs/load-practice/README.md)。  
+**实测基线**：[`baselines/local-measured-baseline.md`](baselines/local-measured-baseline.md)。
+
 ## 依赖安装
 
 系统 Python 通常没有 httpx，用虚拟环境：

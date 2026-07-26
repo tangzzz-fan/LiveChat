@@ -88,6 +88,7 @@ flowchart LR
 
 ## 文档导航
 
+- [**验证链路设计方法论**](验证链路设计方法论.md)（复盘 / 对外讲述：原则、场景设计、考察边界）
 - [架构设计总览](架构设计总览.md)
 - [load-practice 实践手册](load-practice/README.md)（0030）
 - [iOS 高负载/弱网方案](ios-high-load-client.md)（0033）

@@ -18,7 +18,8 @@
 | ADR | 有少量 | [`adr/`](./adr/) | JWT、追踪、混沌等单一决策 |
 | API | 有 Markdown | [`API参考.md`](./API参考.md) | 客户端怎么调；**无 OpenAPI/Swagger** |
 | 操作 | 有 | [`build-and-test.md`](../livechat-server/docs/build-and-test.md)、`Makefile`、`scripts/` | 怎么起停、测、演练 |
-| **Go 语言/库用法导读** | **原先缺 → 本文** | 本文 | 标准库 + 依赖如何在本仓落地 |
+| **验证方法论** | **有** | [`验证链路设计方法论.md`](./验证链路设计方法论.md) | 压测/混沌原则、场景设计、对外叙事 |
+| **Go 语言/库用法导读** | **有** | 本文 | 标准库 + 依赖如何在本仓落地 |
 
 结论：业务正确性与 IM 专题文档较全；**缺的是「弱 Go 读者」从语言/框架走进代码的梯子**——由本文补上。
 
@@ -177,7 +178,9 @@ mux.Handle("GET /v1/groups/{gid}/members", ...)
 
 ### 想搞懂「长连接与高负载」
 
-→ `架构设计总览` 痛点表 + `engineering-problems/03,10,15` + `load-practice/` + `docs/chaos/`
+→ [`验证链路设计方法论.md`](./验证链路设计方法论.md)（先懂「为什么这样测」）  
+→ `架构设计总览` 痛点表 + `engineering-problems/03,10,15` + `load-practice/` + `docs/chaos/`  
+→ 证据：`load_test/baselines/local-measured-baseline.md`
 
 ### 想调 HTTP / WS
 
