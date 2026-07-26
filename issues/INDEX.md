@@ -38,4 +38,4 @@
 | [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | complete | `done`, `p1` | 2026-07-26 |
 | [0035](0035-ios-client-rewrite.md) | iOS 客户端从零重写：SPM 多包 + GRDB + TGReduxKit + 薄 App | open | `ready-for-agent`, `p0` | 2026-07-26 |
 | [0036](0036-ios-rewrite-design.md) | iOS 重写设计：Spec 13 修订 + 决策文档（Redux/WS/后台） | complete | `done`, `p0` | 2026-07-26 |
-| [0037](0037-ios-spm-scaffold.md) | iOS SPM 脚手架：清空重写 + 本地依赖；HITL 创建 Xcode 工程 | in-progress | `ready-for-human`, `p0`, `blocked-by:0036` | 2026-07-26 |
+| [0037](0037-ios-spm-scaffold.md) | iOS SPM 脚手架：清空重写 + 本地依赖；HITL 创建 Xcode 工程 | complete | `done`, `p0`, `blocked-by:0036` | 2026-07-26 |

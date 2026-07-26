@@ -1,8 +1,8 @@
 ---
 id: "0037"
 title: "iOS SPM 脚手架：清空重写 + 本地依赖；HITL 创建 Xcode 工程"
-status: in-progress
-labels: ["ready-for-human", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: "0035"
 blocked_by: ["0036"]
 created_at: 2026-07-26
@@ -29,25 +29,19 @@ created_at: 2026-07-26
 - [x] Infrastructure 侧有 `WebSocketTransport` + `URLSessionWebSocketTransport` 空壳（可编译）
 - [x] Presentation 侧能创建根 `Store` 空状态（`swift test` 已过）
 - [x] proto 生成脚本 + README 步骤写明（`ios/scripts/gen_proto.sh`；需本机 `brew install protobuf swift-protobuf`）
-- [ ] **HITL（必须由你完成）**：创建 Xcode App 工程（iOS 17+，SwiftUI），把薄 App target 挂上上述 packages；Agent 在你确认工程路径后再 `xcodebuild` 联编验收
-- [x] 开发期本机 HTTP：ATS / `NSAllowsLocalNetworking` 说明已写入 `ios/README.md`
+- [x] **HITL（必须由你完成）**：创建 Xcode App 工程（iOS 17+，SwiftUI），把薄 App target 挂上上述 packages；Agent 在你确认工程路径后再 `xcodebuild` 联编验收
+- [x] 开发期本机 HTTP：ATS / `NSAllowsLocalNetworking` 已配置于 `ios/LiveChat/LiveChat/Info.plist`
 
 ## Blocked by
 
 - [0036](0036-ios-rewrite-design.md)（已 complete）
 
-## 进度（Agent）
+## 验收记录（2026-07-27）
 
-四层 package `swift test` 均已通过。阻塞项仅剩：**你创建 Xcode 工程**（步骤见 `ios/README.md`）。
-
-## HITL — 现在请你创建 Xcode 工程
-
-1. Xcode → New Project → App（SwiftUI，iOS 17+，名 `LiveChat`）  
-2. 保存到：`/Users/bigapple/Developments/LiveChat/ios/LiveChat/`  
-3. Add Local Package：优先 `ios/Packages/ChatPresentation`  
-4. 用 `ios/App/Sources/LiveChatApp.swift` 替换默认 App 入口  
-5. 配 ATS `NSAllowsLocalNetworking`  
-6. 回复：`工程已建好：ios/LiveChat/LiveChat.xcodeproj`
+- 工程 `ios/LiveChat/LiveChat.xcodeproj` 由维护者创建（HITL 完成）；Bundle ID `com.tango.LiveChat`。
+- 首次 `xcodebuild` 失败：App target 误挂 `protoc` / `protoc-gen-swift` / `SwiftProtobufPluginLibrary` / `GRDB-dynamic`（`Missing package product 'protoc'`、`GRDBSQLite` GUID 缺失）。修复：pbxproj 只保留 `TGReduxKit` + `ChatPresentation`，补挂 `ChatApplication` / `ChatInfrastructure` 本地包引用。
+- iPhone 17 Pro 与 iPhone 17 Pro Max（iOS 26.5）均 `BUILD SUCCEEDED`；双模拟器安装并启动成功，显示 “SPM scaffold ready”。
+- 后续多端联调即用这两台模拟器。
 
 ## 技术难点与注意事项
 

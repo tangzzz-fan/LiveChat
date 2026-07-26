@@ -17,9 +17,10 @@ vendor/
 ios/.build/
 ios/Packages/**/.build/
 ios/DerivedData/
-ios/*.xcworkspace/xcuserdata/
-ios/*.xcodeproj/xcuserdata/
-ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/**/*.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/**/.swiftpm/
 ios/Pods/
 *.xcuserstate
 *.xcscmblueprint

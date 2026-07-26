@@ -46,37 +46,28 @@ brew install protobuf swift-protobuf   # 本机若尚未安装
 
 生成物在 `ios/Generated/`；后续功能票再挂进 `ChatInfrastructure` target。
 
-## HITL：请你现在创建 Xcode 工程
+## Xcode 工程（已创建，0037 已验收）
 
-Agent 已写好 packages 与 `App/Sources/LiveChatApp.swift`，**还差可运行的 `.xcodeproj`**。请按下面做完后，把工程路径发回对话：
+- 工程：`ios/LiveChat/LiveChat.xcodeproj`，scheme `LiveChat`
+- Bundle ID：`com.tango.LiveChat`
+- App target 链接的包产物：`TGReduxKit`、`ChatPresentation`、`ChatApplication`、`ChatInfrastructure`
+  （**不要**再挂 `GRDB-dynamic` / `SwiftProtobufPluginLibrary` / `protoc` / `protoc-gen-swift`，会导致 iOS 构建失败）
+- ATS：`LiveChat/Info.plist` 已含 `NSAllowsLocalNetworking = YES`
 
-1. **Xcode → File → New → Project → App**
-   - Product Name: `LiveChat`
-   - Interface: **SwiftUI**
-   - Language: **Swift**
-   - 最低系统：**iOS 17**
-2. **保存位置**：建议  
-   `/Users/bigapple/Developments/LiveChat/ios/LiveChat/`  
-   （会得到 `ios/LiveChat/LiveChat.xcodeproj`）
-3. **删除** Xcode 自动生成的 `ContentView.swift` / 默认 `*App.swift`（若与样板冲突）
-4. **把** `ios/App/Sources/LiveChatApp.swift` **拖进 App target**（勾选 Copy 与否均可，推荐引用仓库内路径）
-5. **File → Add Package Dependencies → Add Local…**，依次添加：
-   - `ios/Packages/ChatPresentation`（会递归拉到 Application / Infrastructure / Domain）
-   - 若 Xcode 未自动解析本地传递依赖，再分别 Add Local：`ChatApplication`、`ChatInfrastructure`、`ChatDomain`
-6. App target → **General → Frameworks**：勾选 `ChatPresentation`（及需要直接 `import` 的库）
-7. **ATS / 明文 HTTP（开发）**：App target → Info → 增加例外，或在自定义 Info.plist：
+联编 / 双模拟器（iOS 26.5）：
 
-```xml
-<key>NSAppTransportSecurity</key>
-<dict>
-  <key>NSAllowsLocalNetworking</key>
-  <true/>
-</dict>
+```bash
+xcodebuild -project ios/LiveChat/LiveChat.xcodeproj -scheme LiveChat \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+xcodebuild -project ios/LiveChat/LiveChat.xcodeproj -scheme LiveChat \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.5' build
+
+# 安装 + 启动（多端联调用两台）
+xcrun simctl boot "iPhone 17 Pro"; xcrun simctl boot "iPhone 17 Pro Max"
+APP=$(find ~/Library/Developer/Xcode/DerivedData/LiveChat-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -name LiveChat.app | head -1)
+xcrun simctl install booted "$APP"
+xcrun simctl launch booted com.tango.LiveChat
 ```
-
-8. 选模拟器 **Run**；应看到 “LiveChat / SPM scaffold ready”
-
-完成后回复例如：`工程已建好：ios/LiveChat/LiveChat.xcodeproj`，我再跑 `xcodebuild` 做联编验收并关闭 0037 AC。
 
 ## 边界提醒
 

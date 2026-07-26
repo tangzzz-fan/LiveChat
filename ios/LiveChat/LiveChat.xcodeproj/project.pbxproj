@@ -1,0 +1,673 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1410CCF530166D0D0081B28F /* TGReduxKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1410CCF430166D0D0081B28F /* TGReduxKit */; };
+		1410CD0A30166E0C0081B28F /* ChatPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 1410CD0930166E0C0081B28F /* ChatPresentation */; };
+		1410CD1130166E0C0081B28F /* ChatApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 1410CD1030166E0C0081B28F /* ChatApplication */; };
+		1410CD1330166E0C0081B28F /* ChatInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 1410CD1230166E0C0081B28F /* ChatInfrastructure */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1410CCD530166C470081B28F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1410CCBF30166C460081B28F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1410CCC630166C460081B28F;
+			remoteInfo = LiveChat;
+		};
+		1410CCDF30166C470081B28F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1410CCBF30166C460081B28F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1410CCC630166C460081B28F;
+			remoteInfo = LiveChat;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1410CCC730166C460081B28F /* LiveChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiveChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1410CCD430166C470081B28F /* LiveChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1410CCDE30166C470081B28F /* LiveChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1410CD0730166DA90081B28F /* Exceptions for "LiveChat" folder in "LiveChat" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1410CCC630166C460081B28F /* LiveChat */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		1410CCC930166C460081B28F /* LiveChat */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1410CD0730166DA90081B28F /* Exceptions for "LiveChat" folder in "LiveChat" target */,
+			);
+			path = LiveChat;
+			sourceTree = "<group>";
+		};
+		1410CCD730166C470081B28F /* LiveChatTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiveChatTests;
+			sourceTree = "<group>";
+		};
+		1410CCE130166C470081B28F /* LiveChatUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiveChatUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1410CCC430166C460081B28F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1410CCF530166D0D0081B28F /* TGReduxKit in Frameworks */,
+				1410CD0A30166E0C0081B28F /* ChatPresentation in Frameworks */,
+				1410CD1130166E0C0081B28F /* ChatApplication in Frameworks */,
+				1410CD1330166E0C0081B28F /* ChatInfrastructure in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCD130166C470081B28F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCDB30166C470081B28F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1410CCBE30166C460081B28F = {
+			isa = PBXGroup;
+			children = (
+				1410CCC930166C460081B28F /* LiveChat */,
+				1410CCD730166C470081B28F /* LiveChatTests */,
+				1410CCE130166C470081B28F /* LiveChatUITests */,
+				1410CCC830166C460081B28F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1410CCC830166C460081B28F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1410CCC730166C460081B28F /* LiveChat.app */,
+				1410CCD430166C470081B28F /* LiveChatTests.xctest */,
+				1410CCDE30166C470081B28F /* LiveChatUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1410CCC630166C460081B28F /* LiveChat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1410CCE830166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChat" */;
+			buildPhases = (
+				1410CCC330166C460081B28F /* Sources */,
+				1410CCC430166C460081B28F /* Frameworks */,
+				1410CCC530166C460081B28F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1410CCC930166C460081B28F /* LiveChat */,
+			);
+			name = LiveChat;
+			packageProductDependencies = (
+				1410CCF430166D0D0081B28F /* TGReduxKit */,
+				1410CD0930166E0C0081B28F /* ChatPresentation */,
+				1410CD1030166E0C0081B28F /* ChatApplication */,
+				1410CD1230166E0C0081B28F /* ChatInfrastructure */,
+			);
+			productName = LiveChat;
+			productReference = 1410CCC730166C460081B28F /* LiveChat.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1410CCD330166C470081B28F /* LiveChatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1410CCEB30166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChatTests" */;
+			buildPhases = (
+				1410CCD030166C470081B28F /* Sources */,
+				1410CCD130166C470081B28F /* Frameworks */,
+				1410CCD230166C470081B28F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1410CCD630166C470081B28F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1410CCD730166C470081B28F /* LiveChatTests */,
+			);
+			name = LiveChatTests;
+			packageProductDependencies = (
+			);
+			productName = LiveChatTests;
+			productReference = 1410CCD430166C470081B28F /* LiveChatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		1410CCDD30166C470081B28F /* LiveChatUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1410CCEE30166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChatUITests" */;
+			buildPhases = (
+				1410CCDA30166C470081B28F /* Sources */,
+				1410CCDB30166C470081B28F /* Frameworks */,
+				1410CCDC30166C470081B28F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1410CCE030166C470081B28F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1410CCE130166C470081B28F /* LiveChatUITests */,
+			);
+			name = LiveChatUITests;
+			packageProductDependencies = (
+			);
+			productName = LiveChatUITests;
+			productReference = 1410CCDE30166C470081B28F /* LiveChatUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1410CCBF30166C460081B28F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					1410CCC630166C460081B28F = {
+						CreatedOnToolsVersion = 26.6;
+						LastSwiftMigration = 2660;
+					};
+					1410CCD330166C470081B28F = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 1410CCC630166C460081B28F;
+					};
+					1410CCDD30166C470081B28F = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 1410CCC630166C460081B28F;
+					};
+				};
+			};
+			buildConfigurationList = 1410CCC230166C460081B28F /* Build configuration list for PBXProject "LiveChat" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1410CCBE30166C460081B28F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1410CCF330166D0D0081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/TGReduxKit" */,
+				1410CCFA30166D440081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/GRDB.swift" */,
+				1410CD0330166D6E0081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/swift-protobuf" */,
+				1410CD0830166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatPresentation" */,
+				1410CD1430166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatApplication" */,
+				1410CD1530166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatInfrastructure" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1410CCC830166C460081B28F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1410CCC630166C460081B28F /* LiveChat */,
+				1410CCD330166C470081B28F /* LiveChatTests */,
+				1410CCDD30166C470081B28F /* LiveChatUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1410CCC530166C460081B28F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCD230166C470081B28F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCDC30166C470081B28F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1410CCC330166C460081B28F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCD030166C470081B28F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1410CCDA30166C470081B28F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1410CCD630166C470081B28F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1410CCC630166C460081B28F /* LiveChat */;
+			targetProxy = 1410CCD530166C470081B28F /* PBXContainerItemProxy */;
+		};
+		1410CCE030166C470081B28F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1410CCC630166C460081B28F /* LiveChat */;
+			targetProxy = 1410CCDF30166C470081B28F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1410CCE630166C470081B28F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1410CCE730166C470081B28F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1410CCE930166C470081B28F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveChat/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1410CCEA30166C470081B28F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveChat/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		1410CCEC30166C470081B28F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiveChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiveChat";
+			};
+			name = Debug;
+		};
+		1410CCED30166C470081B28F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiveChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LiveChat";
+			};
+			name = Release;
+		};
+		1410CCEF30166C470081B28F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LiveChat;
+			};
+			name = Debug;
+		};
+		1410CCF030166C470081B28F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UKXWZ3FS84;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tango.LiveChatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LiveChat;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1410CCC230166C460081B28F /* Build configuration list for PBXProject "LiveChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1410CCE630166C470081B28F /* Debug */,
+				1410CCE730166C470081B28F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1410CCE830166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1410CCE930166C470081B28F /* Debug */,
+				1410CCEA30166C470081B28F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1410CCEB30166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1410CCEC30166C470081B28F /* Debug */,
+				1410CCED30166C470081B28F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1410CCEE30166C470081B28F /* Build configuration list for PBXNativeTarget "LiveChatUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1410CCEF30166C470081B28F /* Debug */,
+				1410CCF030166C470081B28F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		1410CCF330166D0D0081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/TGReduxKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../../TG Libraries/TGReduxKit";
+		};
+		1410CCFA30166D440081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/GRDB.swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../../TG Libraries/GRDB.swift";
+		};
+		1410CD0330166D6E0081B28F /* XCLocalSwiftPackageReference "../../../TG Libraries/swift-protobuf" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../../TG Libraries/swift-protobuf";
+		};
+		1410CD0830166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatPresentation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/ChatPresentation;
+		};
+		1410CD1430166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatApplication" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/ChatApplication;
+		};
+		1410CD1530166E0C0081B28F /* XCLocalSwiftPackageReference "../Packages/ChatInfrastructure" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/ChatInfrastructure;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1410CCF430166D0D0081B28F /* TGReduxKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TGReduxKit;
+		};
+		1410CD0930166E0C0081B28F /* ChatPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChatPresentation;
+		};
+		1410CD1030166E0C0081B28F /* ChatApplication */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChatApplication;
+		};
+		1410CD1230166E0C0081B28F /* ChatInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChatInfrastructure;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1410CCBF30166C460081B28F /* Project object */;
+}
