@@ -83,6 +83,8 @@ flowchart LR
 ## 文档导航
 
 - [架构设计总览](架构设计总览.md)
+- [load-practice 实践手册](load-practice/README.md)（0030）
+- [iOS 高负载/弱网方案](ios-high-load-client.md)（0033）
 - [engineering-problems/15 高并发失效模式](engineering-problems/15-high-concurrency-failure-modes.md)
 - [chaos 手册](chaos/README.md)
 - [iOS 多端接入评估](iOS多端接入评估与实现.md)

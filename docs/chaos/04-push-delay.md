@@ -8,19 +8,24 @@
 
 ## 注入方式
 
-本地无真实 APNs 时，用以下之一：
+本地无真实 APNs 时，用环境变量注入（实现于 `MockAPNsClient.Send`）：
 
 ```bash
-# A. 临时让 push provider 指向不可达地址（若配置支持）
-#    或在 push orchestrator 中打开 fail-closed 测试开关
+export CHAT_ENV=dev
+# 打印注入说明
+bash livechat-server/scripts/chaos/push-delay-on.sh
 
-# B. 行为级验证（不注入故障）：
-#    1. 接收方不下线 WebSocket
-#    2. 发送消息
-#    3. 确认仅靠 WS/sync 可达，不依赖 push
+# 延迟 5s（示例）
+export PUSH_INJECT_DELAY_MS=5000
+# 或强制失败
+# export PUSH_INJECT_FAIL=1
+
+# 必须重启 outbox-consumer 使环境变量生效
+cd livechat-server && make run-outbox-consumer
 ```
 
-若实现了 mock 延迟注入，可在环境变量中设置例如 `PUSH_INJECT_DELAY_MS=5000` 后重启 outbox-consumer。
+行为级验证（不注入故障）仍可用：接收方不上 WS，确认仅靠 sync 可达。
+
 
 ## 预期系统行为
 
@@ -41,9 +46,11 @@
 
 ## 恢复步骤
 
-撤销延迟/错误注入，重启 outbox-consumer（若改了配置），执行：
+撤销延迟/错误注入，重启 outbox-consumer：
 
 ```bash
+bash livechat-server/scripts/chaos/push-delay-off.sh
+# unset 环境变量后重启 consumer
 bash livechat-server/scripts/chaos/health-check.sh
 ```
 

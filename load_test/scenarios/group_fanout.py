@@ -7,7 +7,7 @@ from core.client import ChatClient
 
 
 class GroupFanoutScenario:
-    def __init__(self, base_url: str, ws_url: str):
+    def __init__(self, base_url: str, ws_url: str, max_members: int = 50):
         self.base_url = base_url.rstrip("/")
         self.ws_url = ws_url
         self.client = None
@@ -15,13 +15,14 @@ class GroupFanoutScenario:
         self.members = []
         self.conversation_id = None
         self.group_id = None
+        # Cap for local DB; raise to stress write amplification / hot-group msg rate
+        self.max_members = max(2, max_members)
 
     async def setup(self, count: int):
         self.client = ChatClient(self.base_url, self.ws_url)
         await self.client.start()
 
-        # Owner + up to min(count, 20) members (local DB friendly; still exercises fanout)
-        member_n = max(2, min(count, 20))
+        member_n = max(2, min(count, self.max_members))
         self.owner = await self.client.register_user(0)
         self.members = [self.owner]
         for i in range(1, member_n):

@@ -1,8 +1,8 @@
 ---
 id: "0033"
 title: "iOS 高负载/弱网客户端方案与坑点（文档先行）"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: "0029"
 blocked_by: []
 created_at: 2026-07-26
@@ -25,8 +25,8 @@ created_at: 2026-07-26
 
 ## Acceptance criteria
 
-- [ ] 新建 `docs/ios-high-load-client.md`，沿用工程问题库风格：问题 → 业界/常见方案 → 本仓落点（Spec 13 / `ios/` 协议）→ 本地复现 → 坑点
-- [ ] 至少覆盖以下 **10** 个子问题：
+- [x] 新建 `docs/ios-high-load-client.md`，沿用工程问题库风格：问题 → 业界/常见方案 → 本仓落点（Spec 13 / `ios/` 协议）→ 本地复现 → 坑点
+- [x] 至少覆盖以下 **10** 个子问题：
   1. 突发投递刷新风暴（批量落库 + ValueObservation 去抖）
   2. 大会话滚动（conversation_seq 游标分页 + 懒加载）
   3. 发送队列写风暴（actor MessageSendExecutor + 有界队列 + 幂等键）
@@ -37,10 +37,10 @@ created_at: 2026-07-26
   8. sync 追赶洪流（分批 apply + cursor 单调）
   9. 内存 / 图片（缩略图优先 + 双层缓存 + 取消离屏）
   10. 时钟与顺序（按 conversation_seq 渲染 + server_message_id 去重）
-- [ ] 写明本地复现手法：`load_test` 灌 1k+ 消息、group_fanout + 前台观察、Network Link Conditioner
-- [ ] 明确 **不做**：用 iOS 模拟器集群打服务端容量
-- [ ] 给出建议的后续实现横切验收项（供补进 0023/0024/0025 或新票）：首屏 1k 不卡主线程、弱网发送不丢、突发投递不掉帧
-- [ ] 更新 [docs/高负载IM验证计划.md](../docs/高负载IM验证计划.md)、[iOS多端接入评估](../docs/iOS多端接入评估与实现.md)、`ios/README.md` 导航链接
+- [x] 写明本地复现手法：`load_test` 灌 1k+ 消息、group_fanout + 前台观察、Network Link Conditioner
+- [x] 明确 **不做**：用 iOS 模拟器集群打服务端容量
+- [x] 给出建议的后续实现横切验收项（供补进 0023/0024/0025 或新票）：首屏 1k 不卡主线程、弱网发送不丢、突发投递不掉帧
+- [x] 更新 [docs/高负载IM验证计划.md](../docs/高负载IM验证计划.md)、[iOS多端接入评估](../docs/iOS多端接入评估与实现.md)、`ios/README.md` 导航链接
 
 ## Blocked by
 

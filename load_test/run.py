@@ -54,6 +54,7 @@ def parse_args():
     parser.add_argument("--jitter-ms", type=int, default=500)
     parser.add_argument("--no-jitter", action="store_true")
     parser.add_argument("--quick", action="store_true", help="Quick mode: 10 concurrency, 10s")
+    parser.add_argument("--max-members", type=int, default=50, help="group_fanout member cap")
     return parser.parse_args()
 
 
@@ -61,6 +62,8 @@ async def run_scenario(name, args):
     cls = SCENARIOS[name]
     if name == "reconnect_storm":
         scenario = cls(args.base_url, args.ws_url, jitter_ms=args.jitter_ms, no_jitter=args.no_jitter)
+    elif name == "group_fanout":
+        scenario = cls(args.base_url, args.ws_url, max_members=args.max_members)
     else:
         scenario = cls(args.base_url, args.ws_url)
     concurrency = 10 if args.quick else args.concurrency

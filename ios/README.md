@@ -31,7 +31,7 @@ xcodebuild -project LiveChat.xcodeproj -scheme LiveChat build
 
 P1 学习扩展，当前仅骨架（Entity + Repository 协议 + 消息状态机 + GRDB Schema）。  
 **服务端已支持多 `device_id` 同时在线**；要让几台 iOS「真能聊」，需按 [`docs/iOS多端接入评估与实现.md`](../docs/iOS多端接入评估与实现.md) 接真实 HTTP/WS。API 见 [`docs/API参考.md`](../docs/API参考.md)。  
-高负载/弱网客户端方案（文档先行，issue [0033](../issues/0033-ios-high-load-client-design.md)）：见 [`docs/高负载IM验证计划.md`](../docs/高负载IM验证计划.md)。
+高负载/弱网客户端方案（文档先行，issue [0033](../issues/0033-ios-high-load-client-design.md)）：[`docs/ios-high-load-client.md`](../docs/ios-high-load-client.md)。
 
 UI 实现在后续 Phase。
 

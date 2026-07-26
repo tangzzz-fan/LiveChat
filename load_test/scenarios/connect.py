@@ -1,6 +1,7 @@
 """
-登录 + WebSocket 连接建立压测
+登录 + WebSocket 连接建立压测（真 upgrade；握手帧最小可用）。
 """
+import asyncio
 from core.client import ChatClient
 
 
@@ -9,14 +10,28 @@ class ConnectScenario:
         self.base_url = base_url
         self.ws_url = ws_url
         self.client = None
+        self._sockets = []
 
     async def setup(self, count: int):
         self.client = ChatClient(self.base_url, self.ws_url)
         await self.client.start()
 
     async def execute(self, idx: int):
-        # Just register a new user (which exercises auth + token flow)
-        await self.client.register_user(idx)
+        user = await self.client.register_user(idx)
+        ws = await self.client.connect_ws(user["token"], user["device_id"])
+        self._sockets.append(ws)
+        # Keep connection briefly so upgrade path is measurable; close to avoid FD leak under long runs
+        await asyncio.sleep(0.05)
+        await ws.close()
+        self._sockets.remove(ws)
+        return user
 
     async def teardown(self):
-        await self.client.stop()
+        for ws in list(self._sockets):
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        self._sockets.clear()
+        if self.client:
+            await self.client.stop()

@@ -1,8 +1,8 @@
 ---
 id: "0030"
 title: "高负载业界实践模拟手册（load-practice）"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["complete", "p0"]
 parent: "0029"
 blocked_by: []
 created_at: 2026-07-26
@@ -22,7 +22,7 @@ created_at: 2026-07-26
 
 ## Acceptance criteria
 
-- [ ] 新建 `docs/load-practice/README.md` 索引 + 至少 **8** 篇场景文档，覆盖：
+- [x] 新建 `docs/load-practice/README.md` 索引 + 至少 **8** 篇场景文档，覆盖：
   - 写高峰
   - 热点群 / 写扩散
   - 重连风暴
@@ -31,15 +31,15 @@ created_at: 2026-07-26
   - DB 暂停 / 主库不可用
   - Gateway kill
   - 离线 sync 积压
-- [ ] 每篇统一模板：
+- [x] 每篇统一模板：
   1. 问题是什么（含放大因子公式或定性说明）
   2. 业界常见方案
   3. 本仓现状（Implemented / Partial / Missing + 代码锚点）
   4. 如何模拟（精确命令：`load_test` / `scripts/chaos/*`）
   5. 观察什么（metrics、日志关键字、Redis key 等）
   6. 通过标准（学习型行为预期，非 Spec 01 绝对数字）
-- [ ] 与 [15-high-concurrency-failure-modes.md](../docs/engineering-problems/15-high-concurrency-failure-modes.md)、[docs/chaos/](../docs/chaos/) 交叉链接，避免重复叙述冲突
-- [ ] 更新 [docs/高负载IM验证计划.md](../docs/高负载IM验证计划.md) / 架构总览导航入口
+- [x] 与 [15-high-concurrency-failure-modes.md](../docs/engineering-problems/15-high-concurrency-failure-modes.md)、[docs/chaos/](../docs/chaos/) 交叉链接，避免重复叙述冲突
+- [x] 更新 [docs/高负载IM验证计划.md](../docs/高负载IM验证计划.md) / 架构总览导航入口
 
 ## Blocked by
 

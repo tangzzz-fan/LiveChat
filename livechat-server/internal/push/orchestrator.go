@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"time"
 
@@ -52,11 +53,27 @@ func NewMockAPNsClient() *MockAPNsClient {
 	return &MockAPNsClient{}
 }
 
-func (c *MockAPNsClient) Send(_ context.Context, deviceToken string, _ *APNsPayload) (string, string, error) {
+func (c *MockAPNsClient) Send(ctx context.Context, deviceToken string, _ *APNsPayload) (string, string, error) {
+	// Chaos 04: PUSH_INJECT_DELAY_MS / PUSH_INJECT_FAIL=1
+	if msStr := os.Getenv("PUSH_INJECT_DELAY_MS"); msStr != "" {
+		if ms, err := strconv.Atoi(msStr); err == nil && ms > 0 {
+			slog.Warn("push inject delay", "ms", ms)
+			select {
+			case <-time.After(time.Duration(ms) * time.Millisecond):
+			case <-ctx.Done():
+				return "", "failed", ctx.Err()
+			}
+		}
+	}
+	if v := os.Getenv("PUSH_INJECT_FAIL"); v == "1" || v == "true" {
+		slog.Warn("push inject fail", "device_token_prefix", deviceToken[:min(8, len(deviceToken))])
+		return "", "failed", fmt.Errorf("injected push failure")
+	}
 	apnsID := fmt.Sprintf("apns-mock-%d", time.Now().UnixNano())
 	slog.Info("mock APNs push sent", "device_token_prefix", deviceToken[:min(8, len(deviceToken))], "apns_id", apnsID)
 	return apnsID, "sent", nil
 }
+
 
 // ── Orchestrator ──────────────────────────────────
 

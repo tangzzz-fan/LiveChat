@@ -67,6 +67,10 @@
 | 热点隔离 + 写扩散分级（当前主路径） | 与 WhatsApp 类规模匹配 | 大群实时性变差，产品需接受 |
 | 读扩散为主（Telegram 向） | 写入恒定 | sync/游标模型更重，P0 未选 |
 
+## 可执行演练入口
+
+按场景复制命令：[`docs/load-practice/`](../load-practice/README.md)（issue 0030）。推进计划：[`docs/高负载IM验证计划.md`](../高负载IM验证计划.md)。
+
 ## 踩坑记录
 
 - Ticket 0019/0020 曾标记 complete，但 chaos 手册曾只落地 Redis 一篇、多个压测场景仍是 stub——**文档完成 ≠ 可演练**。本轮已补齐手册并充实 `reconnect_storm` / `group_fanout`。

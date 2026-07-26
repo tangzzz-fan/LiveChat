@@ -1,61 +1,58 @@
 """
-文本消息发送压测场景
+文本消息发送压测：用群会话 API 建会话，避免 psql 直写。
 """
-import asyncio
+import time
+import httpx
 from core.client import ChatClient
 
 
 class SendMessageScenario:
     def __init__(self, base_url: str, ws_url: str):
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self.ws_url = ws_url
         self.client = None
-        self.users = []
+        self.senders = []
         self.conversation_id = None
 
     async def setup(self, count: int):
         self.client = ChatClient(self.base_url, self.ws_url)
         await self.client.start()
 
-        # Register two users and create a conversation
         user_a = await self.client.register_user(0)
         user_b = await self.client.register_user(1)
-        self.users = [user_a, user_b]
 
-        # Create a direct conversation via DB insert (simplified)
-        import httpx
-        async with httpx.AsyncClient() as c:
-            # Register creates users, we need to create a conversation
-            # For load testing, we just send messages between the two
-            pass
+        headers = {"Authorization": f"Bearer {user_a['token']}"}
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            resp = await http.post(
+                f"{self.base_url}/v1/groups",
+                headers=headers,
+                json={"name": f"load-send-{int(time.time())}", "description": "send_message load"},
+            )
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"create group failed: {resp.status_code} {resp.text}")
+            data = resp.json()
+            group = data.get("group") or {}
+            group_id = group.get("id") or data.get("group_id")
+            self.conversation_id = data.get("conversation_id") or f"conv_grp_{group_id}"
 
-        # For Phase 1 compat: use a known conversation ID
-        self.conversation_id = "conv-load-test"
+            add = await http.post(
+                f"{self.base_url}/v1/groups/{group_id}/members",
+                headers=headers,
+                json={"user_ids": [user_b["user_id"]]},
+            )
+            if add.status_code not in (200, 201, 204):
+                raise RuntimeError(f"add members failed: {add.status_code} {add.text}")
 
-        # Create conversation via SQL (best effort)
-        import subprocess
-        try:
-            subprocess.run([
-                "psql", "-h", "localhost", "-U", "livechat", "-d", "livechat",
-                "-c", f"INSERT INTO conversations (id, type) VALUES ('{self.conversation_id}', 'direct') ON CONFLICT DO NOTHING"
-            ], capture_output=True)
-            subprocess.run([
-                "psql", "-h", "localhost", "-U", "livechat", "-d", "livechat",
-                "-c", f"INSERT INTO conversation_members (conversation_id, user_id) VALUES ('{self.conversation_id}', {user_a['user_id']}), ('{self.conversation_id}', {user_b['user_id']}) ON CONFLICT DO NOTHING"
-            ], capture_output=True)
-        except Exception:
-            pass
-
-        # Round-robin through virtual users
-        all_tokens = [user_a["token"]] * (count // 2) + [user_b["token"]] * (count - count // 2)
-        for i, tok in enumerate(all_tokens):
-            self.users.append({"idx": i, "token": tok})
+        # Round-robin virtual users over the two tokens
+        half = max(1, count // 2)
+        self.senders = [{"token": user_a["token"]}] * half + [{"token": user_b["token"]}] * (count - half)
+        print(f"  [send_message] conv={self.conversation_id} virtual_users={len(self.senders)}")
 
     async def execute(self, idx: int):
-        user = self.users[idx % len(self.users)]
-        import time
-        seq = int(time.time() * 1000)
+        user = self.senders[idx % len(self.senders)]
+        seq = int(time.time() * 1000) + idx
         return await self.client.send_message(user["token"], self.conversation_id, seq)
 
     async def teardown(self):
-        await self.client.stop()
+        if self.client:
+            await self.client.stop()

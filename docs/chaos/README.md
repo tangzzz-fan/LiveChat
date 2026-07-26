@@ -13,6 +13,10 @@ Phase 3 P0 交付物：6 个典型故障场景的演练手册 + 注入/恢复脚
 | 05 | 单网关节点宕机 | [手册](05-gateway-pod-failure.md) | 中 |
 | 06 | 热点群消息洪峰 | [手册](06-hot-group-flood.md) | 中 |
 
+## 与 load-practice 的关系
+
+故障注入细则在本目录；「问题→方案→命令→指标→通过标准」的学习演练矩阵见 [`../load-practice/`](../load-practice/README.md)。
+
 ## 首次演练推荐
 
 从 `01-redis-outage` 开始——它最可控、不涉及数据丢失、恢复最快。
@@ -29,6 +33,8 @@ outbox-resume.sh  → 恢复 outbox-consumer 进程
 db-pause.sh       → 暂停 PostgreSQL
 db-resume.sh      → 恢复 PostgreSQL
 gateway-kill.sh   → 终止 gateway 进程
+push-delay-on.sh  → 说明如何开启 PUSH_INJECT_*（chaos 04）
+push-delay-off.sh → 说明如何关闭推送注入
 health-check.sh   → 系统状态校验
 ```
 
