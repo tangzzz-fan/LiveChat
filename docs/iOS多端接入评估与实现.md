@@ -174,6 +174,7 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 | [`高负载IM验证计划.md`](./高负载IM验证计划.md) | 高负载验证阶段；含 iOS 抗压定位 |
 | [`ios-high-load-client.md`](./ios-high-load-client.md) | iOS 高负载/弱网方案与坑点（0033） |
 | [`ios-client-rewrite.md`](./ios-client-rewrite.md) | iOS 从零重写决策（0035/0036） |
+| [`ios-app-testing.md`](./ios-app-testing.md) | iOS App 联调：手机号、双模拟器、发消息 |
 | [`API参考.md`](./API参考.md) | 客户端调什么接口 |
 | **本文** | iOS 多端能不能做、按 Spec 13 怎么做 |
 | `ios/README.md` | 工程编译与模块树 |
