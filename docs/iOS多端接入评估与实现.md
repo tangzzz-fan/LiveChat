@@ -188,8 +188,8 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 1. **[0035](../issues/0035-ios-client-rewrite.md)** 父票：从零重写  
 2. **[0036](../issues/0036-ios-rewrite-design.md)** 设计 ✅ → [`docs/ios-client-rewrite.md`](./ios-client-rewrite.md)  
 3. **[0037](../issues/0037-ios-spm-scaffold.md)** SPM + Xcode ✅  
-4. **[0038](../issues/0038-ios-auth-otp-keychain-login.md)** OTP 登录 ← **当前 frontier**  
-5. **[0039](../issues/0039-ios-local-first-send-direct.md)** 本地优先发送 + 1:1  
+4. **[0038](../issues/0038-ios-auth-otp-keychain-login.md)** OTP 登录 ✅  
+5. **[0039](../issues/0039-ios-local-first-send-direct.md)** 本地优先发送 + 1:1 ← **当前 frontier**  
 6. **[0040](../issues/0040-ios-incremental-sync.md)** 增量 sync  
 7. **[0041](../issues/0041-ios-websocket-realtime.md)** WS 实时  
 8. **[0042](../issues/0042-ios-push-token-silent-sync.md)** Push + 静默 sync  
