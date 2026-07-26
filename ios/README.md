@@ -1,42 +1,85 @@
-# LiveChat iOS
+# LiveChat iOS（重写脚手架 · 0037）
 
-按 Spec 13 分层的客户端。**当前进入从零重写**（见 [0035](../issues/0035-ios-client-rewrite.md)）：旧 `AppCore` / `Packages` 骨架将被清空替换。
+纯 SPM 多 package + 薄 App target。决策见 [`docs/ios-client-rewrite.md`](../docs/ios-client-rewrite.md) / Spec 13。
 
-## 决策与文档
+## 目录
 
-| 文档 | 用途 |
-|------|------|
-| [Spec 13](../Specs/13-iOS客户端架构设计.md) | 模块、状态机、生命周期 |
-| [ios-client-rewrite.md](../docs/ios-client-rewrite.md) | 拍板：SPM、GRDB、TGReduxKit、原生 WS、后台模型 |
-| [ios-high-load-client.md](../docs/ios-high-load-client.md) | 高负载/弱网坑点与横切验收 |
-| [iOS多端接入评估](../docs/iOS多端接入评估与实现.md) | 多端联调与服务端能力 |
-| [API参考](../docs/API参考.md) | HTTP / 协议面 |
-
-## 工程形态（目标）
-
-```
-薄 App target (SwiftUI 入口)
-  └── ChatPresentation (TGReduxKit Store)
-        └── ChatApplication (Use Cases)
-              ├── ChatDomain
-              └── ChatInfrastructure (GRDB, URLSession, WebSocketTransport, Keychain)
+```text
+ios/
+├── Packages/
+│   ├── ChatDomain/           # 实体、状态机、Repository 协议
+│   ├── ChatInfrastructure/   # GRDB、WebSocketTransport、SwiftProtobuf
+│   ├── ChatApplication/      # UseCase 组装（脚手架）
+│   └── ChatPresentation/     # TGReduxKit AppState / Store
+├── App/Sources/LiveChatApp.swift   # 薄入口样板（加入 Xcode App target）
+├── Generated/                # protoc 生成物（脚本产出后入库）
+├── scripts/gen_proto.sh
+└── README.md
 ```
 
-本地 SPM path（已下载）：
+## 本地依赖（已下载）
 
-- `TG Libraries/GRDB.swift` @ v7.7.1  
-- `TG Libraries/swift-protobuf` @ 1.31.0  
-- `TG Libraries/TGReduxKit`
+相对 `ios/Packages/<Pkg>/Package.swift`：
 
-## 状态
+| 包 | path |
+|----|------|
+| GRDB | `../../../../TG Libraries/GRDB.swift` @ v7.7.1 |
+| swift-protobuf | `../../../../TG Libraries/swift-protobuf` @ 1.31.0 |
+| TGReduxKit | `../../../../TG Libraries/TGReduxKit` |
 
-- 设计票 [0036](../issues/0036-ios-rewrite-design.md) ✅  
-- 下一票 [0037](../issues/0037-ios-spm-scaffold.md)：脚手架；**创建 Xcode 工程需你本地完成（HITL）**  
-- 旧功能票 0022–0025 / 0027–0028 已 `superseded`
-
-## 编译（脚手架就绪后）
+## 命令行验证（无需 Xcode App）
 
 ```bash
-# 具体 scheme / 工程路径以 0037 落地后的 ios/README 为准
-xcodebuild -project <LiveChat.xcodeproj> -scheme LiveChat -destination 'platform=iOS Simulator,name=iPhone 16' build
+cd ios/Packages/ChatDomain && swift test
+cd ../ChatInfrastructure && swift test
+cd ../ChatApplication && swift test
+cd ../ChatPresentation && swift test
 ```
+
+## Protobuf 生成
+
+```bash
+proxy_on
+brew install protobuf swift-protobuf   # 本机若尚未安装
+./ios/scripts/gen_proto.sh
+```
+
+生成物在 `ios/Generated/`；后续功能票再挂进 `ChatInfrastructure` target。
+
+## HITL：请你现在创建 Xcode 工程
+
+Agent 已写好 packages 与 `App/Sources/LiveChatApp.swift`，**还差可运行的 `.xcodeproj`**。请按下面做完后，把工程路径发回对话：
+
+1. **Xcode → File → New → Project → App**
+   - Product Name: `LiveChat`
+   - Interface: **SwiftUI**
+   - Language: **Swift**
+   - 最低系统：**iOS 17**
+2. **保存位置**：建议  
+   `/Users/bigapple/Developments/LiveChat/ios/LiveChat/`  
+   （会得到 `ios/LiveChat/LiveChat.xcodeproj`）
+3. **删除** Xcode 自动生成的 `ContentView.swift` / 默认 `*App.swift`（若与样板冲突）
+4. **把** `ios/App/Sources/LiveChatApp.swift` **拖进 App target**（勾选 Copy 与否均可，推荐引用仓库内路径）
+5. **File → Add Package Dependencies → Add Local…**，依次添加：
+   - `ios/Packages/ChatPresentation`（会递归拉到 Application / Infrastructure / Domain）
+   - 若 Xcode 未自动解析本地传递依赖，再分别 Add Local：`ChatApplication`、`ChatInfrastructure`、`ChatDomain`
+6. App target → **General → Frameworks**：勾选 `ChatPresentation`（及需要直接 `import` 的库）
+7. **ATS / 明文 HTTP（开发）**：App target → Info → 增加例外，或在自定义 Info.plist：
+
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+  <key>NSAllowsLocalNetworking</key>
+  <true/>
+</dict>
+```
+
+8. 选模拟器 **Run**；应看到 “LiveChat / SPM scaffold ready”
+
+完成后回复例如：`工程已建好：ios/LiveChat/LiveChat.xcodeproj`，我再跑 `xcodebuild` 做联编验收并关闭 0037 AC。
+
+## 边界提醒
+
+- Store 只放视图真相；消息全量在 GRDB  
+- 默认 `URLSessionWebSocketTransport`；不引入 Starscream  
+- 进后台不硬撑 WS（功能票实现）

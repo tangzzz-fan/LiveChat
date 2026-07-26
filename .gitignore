@@ -15,6 +15,7 @@ vendor/
 
 # iOS
 ios/.build/
+ios/Packages/**/.build/
 ios/DerivedData/
 ios/*.xcworkspace/xcuserdata/
 ios/*.xcodeproj/xcuserdata/

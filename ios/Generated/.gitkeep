@@ -1,0 +1,2 @@
+# Place generated `*.pb.swift` here via `ios/scripts/gen_proto.sh`.
+# Scaffold does not require generated files to compile packages (uses SwiftProtobuf smoke import).
