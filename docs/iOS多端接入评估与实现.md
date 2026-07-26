@@ -171,6 +171,7 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 | 文档 | 用途 |
 |------|------|
 | [`架构设计总览.md`](./架构设计总览.md) | 全站拓扑与痛点解法 |
+| [`高负载IM验证计划.md`](./高负载IM验证计划.md) | 高负载验证阶段；含 iOS 抗压定位 |
 | [`API参考.md`](./API参考.md) | 客户端调什么接口 |
 | **本文** | iOS 多端能不能做、按 Spec 13 怎么做 |
 | `ios/README.md` | 工程编译与模块树 |
@@ -189,5 +190,9 @@ AppCore DI                 →    注册 Live Repository + baseURL 配置
 5. **[0026](../../issues/0026-server-direct-conversation-api.md)**（可选并行）服务端 `direct` 建会话  
 6. **[0027](../../issues/0027-ios-image-media-send-display.md)** 图片消息  
 7. **[0028](../../issues/0028-ios-push-token-silent-sync.md)** 推送 token + 静默 sync  
+
+高负载/弱网（文档先行，与正确性并行）：
+
+8. **[0033](../../issues/0033-ios-high-load-client-design.md)** iOS 高负载方案与坑点 → 产出 `docs/ios-high-load-client.md`；实现横切项后续再开票  
 
 当前仓库 **不必改服务端也能开始 0022–0025**；0026 改善私聊体验。
