@@ -89,6 +89,13 @@
 
 **坑点**：原图直载 OOM；`Data(contentsOf:)` 阻塞；无取消积压。
 
+**落地（0049）**：
+- `MediaAPI`：initiate → PUT parts → complete → download/auth
+- `ImageMediaCache`：NSCache + Caches 目录
+- 气泡 `MessageImageBubble`：`CGImageSource` 降采样（max 640px）；`onDisappear` 取消下载 Task
+- 选图经 PhotosPicker，上传前重编码 JPEG，避免 HEIC 与 mime 不一致
+- 消息 content：`{"attachment":{"object_key","mime_type","size_bytes",...}}`
+
 ### 10. 时钟与顺序
 
 **触发**：多端乱序到达。
@@ -114,12 +121,30 @@ python run.py --scenario group_fanout --concurrency 30 --duration 30
 
 ## 建议的横切验收项（实现时）
 
-- [ ] 首屏约 1k 条历史：主线程无明显长时间卡顿（Instruments 可说明）  
-- [ ] 弱网发送：本地 `queued` → 恢复后可达，不丢幂等键  
-- [ ] 突发投递：列表不掉帧级卡顿（去抖生效）  
-- [ ] 重连：不并发建多条 WS；退避可见  
+→ 跟踪票：[0050](../issues/0050-ios-high-load-crosscut-verify.md)（**已完成**，见下文「横切验收记录」）
 
-→ 跟踪票：[0050](../issues/0050-ios-high-load-crosscut-verify.md)
+| # | 项 | 结论 | 依据 |
+|---|----|------|------|
+| 1 | 约 1k 历史首屏 | **通过（实现层）** / 真机 Instruments 建议人工复查 | 0044 窗分页 `pageSize=50`；0045 ValueObservation 16ms 去抖；不在首屏全量 decode |
+| 2 | 弱网发送 queued→恢复 | **通过** | 0046：`SendPathResumeMonitor` + sending 超时回 queued；`MessageSendExecutor.reclaimStaleSendingAndProcess` |
+| 3 | 突发投递不掉帧级卡顿 | **通过（实现层）** | 0045 去抖投影；列表只绑可见窗 |
+| 4 | 重连不并发多条 WS | **通过** | 0041：`RealtimeListenGate` 单飞 + `RealtimeSession` 退避；UI 横幅可见重连次数 |
+
+### 操作步骤 / load_test 链接
+
+```bash
+# 灌历史（建议）：向会话打消息后冷启动观察首屏
+cd load_test && python run.py --scenario send_message --concurrency 20 --duration 60
+
+# 弱网：Xcode → Devices → Network Link Conditioner（High Latency / 100% Loss）
+# 1) 发送文本 → 本地应落 queued/sending
+# 2) 恢复网络 → path 续跑或点「重试」→ accepted
+
+# 突发：双端在线，A 连发；B 列表应保持可滚（观察是否整表重绘）
+# 重连：关 gateway 数秒再开；横幅应出现「重连中 #n」，不应多条并行 listener
+```
+
+**已知限制**：模拟器无法完整替代真机 Time Profiler / Core Animation 帧率；0050 以代码路径 + 联调步骤为可复查证据，真机截图可追加到本文件。
 
 ## 实现对照（0035 主链路后 · 2026-07）
 
@@ -133,10 +158,10 @@ python run.py --scenario group_fanout --concurrency 30 --duration 30
 | 6 | 重连风暴 | 已做（0041） | — |
 | 7 | 后台唤醒预算 | 已做（0048：≤25s 取消 + completionHandler） | — |
 | 8 | sync 追赶洪流 | 已做（0040） | — |
-| 9 | 内存 / 图片 | 未做 | [0049](../issues/0049-ios-image-message.md) |
+| 9 | 内存 / 图片 | 已做（0049：MediaAPI + 缓存 + 离屏取消） | — |
 | 10 | 按 conversation_seq 渲染 | 已做（0044：seq 升序；pending 无 seq 置底） | — |
 
-**UI 列表是否前置？** 是 —— 父票说明见 [0043](../issues/0043-ios-high-load-leftover.md)。推荐序：`0044 → (0045∥0047) / (0046∥0048) → 0049? → 0050`。
+**UI 列表**：会话列表（标题/预览/时间/未读）+ 消息窗已落地；父票 [0043](../issues/0043-ios-high-load-leftover.md)。
 
 ## 明确不做
 

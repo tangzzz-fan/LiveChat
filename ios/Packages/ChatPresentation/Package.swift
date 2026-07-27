@@ -12,6 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../ChatApplication"),
+        .package(path: "../ChatDomain"),
         .package(path: "../../../../TG Libraries/TGReduxKit"),
     ],
     targets: [
@@ -19,12 +20,13 @@ let package = Package(
             name: "ChatPresentation",
             dependencies: [
                 "ChatApplication",
+                "ChatDomain",
                 .product(name: "TGReduxKit", package: "TGReduxKit"),
             ]
         ),
         .testTarget(
             name: "ChatPresentationTests",
-            dependencies: ["ChatPresentation"]
+            dependencies: ["ChatPresentation", "ChatApplication", "ChatDomain"]
         ),
     ]
 )

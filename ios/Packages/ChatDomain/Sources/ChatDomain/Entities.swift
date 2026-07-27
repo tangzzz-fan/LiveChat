@@ -109,10 +109,20 @@ public struct Attachment: Equatable, Codable, Sendable {
     public let objectKey: String
     public let mimeType: String
     public let sizeBytes: Int64
+    public let width: Int?
+    public let height: Int?
 
-    public init(objectKey: String, mimeType: String, sizeBytes: Int64) {
+    public init(
+        objectKey: String,
+        mimeType: String,
+        sizeBytes: Int64,
+        width: Int? = nil,
+        height: Int? = nil
+    ) {
         self.objectKey = objectKey
         self.mimeType = mimeType
         self.sizeBytes = sizeBytes
+        self.width = width
+        self.height = height
     }
 }

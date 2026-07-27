@@ -70,6 +70,49 @@ public final class HTTPClient: Sendable {
         return try await send(request)
     }
 
+    /// PUT 原始字节（媒体分片上传）。`pathOrURL` 可为相对路径（可含 query）或绝对 URL。
+    public func putData(
+        pathOrURL: String,
+        data: Data,
+        contentType: String = "application/octet-stream"
+    ) async throws {
+        var request = URLRequest(url: resolveURL(pathOrURL))
+        request.httpMethod = "PUT"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HTTPClientError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw HTTPClientError.status(code: http.statusCode, body: "put failed")
+        }
+    }
+
+    public func getData(pathOrURL: String, bearerToken: String? = nil) async throws -> Data {
+        var request = URLRequest(url: resolveURL(pathOrURL))
+        request.httpMethod = "GET"
+        if let bearerToken {
+            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HTTPClientError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw HTTPClientError.status(code: http.statusCode, body: body)
+        }
+        return data
+    }
+
+    private func resolveURL(_ pathOrURL: String) -> URL {
+        if let absolute = URL(string: pathOrURL), absolute.scheme != nil {
+            return absolute
+        }
+        return URL(string: pathOrURL, relativeTo: config.baseURL)!.absoluteURL
+    }
+
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

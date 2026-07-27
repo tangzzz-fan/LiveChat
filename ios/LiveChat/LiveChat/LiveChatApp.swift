@@ -3,6 +3,7 @@ import Foundation
 import TGReduxKit
 import ChatPresentation
 import ChatApplication
+import ChatDomain
 
 typealias StoreOfApp = Store<AppState, AppAction>
 
@@ -11,6 +12,7 @@ struct LiveChatApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: StoreOfApp
     @Environment(\.scenePhase) private var scenePhase
+    private let media: any MediaRepository
 
     init() {
         let services = (try? AppServices.make()) ?? {
@@ -18,8 +20,8 @@ struct LiveChatApp: App {
         }()
         let store = AppStoreFactory.make(services: services)
         _store = State(initialValue: store)
+        media = services.media
         // AppDelegate 在 init 之后由系统注入；在 body.task 里再绑 store/services。
-        // 这里先挂 services 到 UserDefaults 不可取；用 onAppear/task。
         AppBootstrap.shared.services = services
         AppBootstrap.shared.store = store
     }
@@ -28,6 +30,7 @@ struct LiveChatApp: App {
         WindowGroup {
             RootView()
                 .provideStore(store)
+                .environment(\.mediaRepository, media)
                 .task {
                     appDelegate.store = AppBootstrap.shared.store
                     appDelegate.services = AppBootstrap.shared.services

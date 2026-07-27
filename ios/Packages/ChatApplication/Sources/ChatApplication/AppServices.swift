@@ -25,6 +25,7 @@ public struct AppServices: Sendable {
     public let projections: LocalProjectionObserver
     public let pathResume: SendPathResumeMonitor
     public let gapBackfill: ConversationGapBackfill
+    public let media: any MediaRepository
 
     /// 兼容旧调用方命名（类型已是 Port）。
     public var conversations: any ConversationRemote { conversationRemote }
@@ -50,7 +51,8 @@ public struct AppServices: Sendable {
         silentWake: SilentSyncWakeHandler,
         projections: LocalProjectionObserver,
         pathResume: SendPathResumeMonitor,
-        gapBackfill: ConversationGapBackfill
+        gapBackfill: ConversationGapBackfill,
+        media: any MediaRepository
     ) {
         self.database = database
         self.messageStore = messageStore
@@ -72,6 +74,7 @@ public struct AppServices: Sendable {
         self.projections = projections
         self.pathResume = pathResume
         self.gapBackfill = gapBackfill
+        self.media = media
     }
 
     // MARK: - Port assembly（唯一 Live / Fake 装配缝）
@@ -135,6 +138,7 @@ public struct AppServices: Sendable {
             api: conversationMessages,
             session: session
         )
+        let media: any MediaRepository = MediaAPI(http: http, session: session)
         return AppServices(
             database: db,
             messageStore: db,
@@ -154,7 +158,8 @@ public struct AppServices: Sendable {
             silentWake: silentWake,
             projections: projections,
             pathResume: pathResume,
-            gapBackfill: gapBackfill
+            gapBackfill: gapBackfill,
+            media: media
         )
     }
 }

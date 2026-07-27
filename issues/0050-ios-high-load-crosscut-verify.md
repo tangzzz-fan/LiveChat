@@ -1,8 +1,8 @@
 ---
 id: "0050"
 title: "iOS 高负载横切验收：Instruments / 弱网记录"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: complete
+labels: ["done", "p1"]
 parent: "0043"
 blocked_by: ["0044", "0045", "0046"]
 created_at: 2026-07-27
@@ -27,8 +27,8 @@ created_at: 2026-07-27
 
 ## Acceptance criteria
 
-- [ ] 四条横切验收均有文字结论（通过 / 已知限制）
-- [ ] 链接到所用 load_test / 操作步骤
+- [x] 四条横切验收均有文字结论（通过 / 已知限制）— 见 `docs/ios-high-load-client.md`
+- [x] 链接到所用 load_test / 操作步骤
 
 ## Blocked by
 

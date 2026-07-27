@@ -128,6 +128,59 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
+        case .sendImageTapped(let data, let width, let height, let mimeType, let fileName):
+            let conversationID = store.state.chat.activeConversationID
+            let conversationTitle = store.state.chat.conversationRows
+                .first(where: { $0.conversationID == conversationID })?.title
+            store.runTask(id: CancellationID("chat.sendImage")) {
+                guard let conversationID else { return }
+                guard let session = try? services.auth.restoredSession() else {
+                    await store.dispatch(.chat(.failed("未登录")))
+                    return
+                }
+                await store.dispatch(.chat(.busy(true)))
+                do {
+                    let metadata = ImageMetadata(
+                        mimeType: mimeType,
+                        sizeBytes: Int64(data.count),
+                        fileName: fileName,
+                        width: width,
+                        height: height
+                    )
+                    let attachment = try await services.media.uploadImage(
+                        data,
+                        metadata: metadata,
+                        conversationID: conversationID
+                    )
+                    let clientID = "ios-\(session.deviceID)-\(UUID().uuidString.lowercased())"
+                    let content = try ImageMessageContent.encodeAttachment(attachment)
+                    let message = Message(
+                        clientMessageID: clientID,
+                        conversationID: conversationID,
+                        senderUserID: session.userID,
+                        messageType: "image",
+                        content: content,
+                        status: .queued
+                    )
+                    try await services.sendExecutor.enqueueLocalThenSend(message)
+                    try services.database.upsertConversationSummary(
+                        ConversationSummary(
+                            userID: session.userID,
+                            conversationID: conversationID,
+                            type: "direct",
+                            title: conversationTitle,
+                            lastMessagePreview: "[图片]",
+                            lastMessageAt: Date(),
+                            unreadCount: 0
+                        )
+                    )
+                    await store.dispatch(.chat(.busy(false)))
+                } catch SendQueueError.full {
+                    await store.dispatch(.chat(.failed("发送队列已满")))
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
         case .loadOlderMessagesTapped:
             let conversationID = store.state.chat.activeConversationID
             let beforeSeq = store.state.chat.oldestLoadedSeq
@@ -332,7 +385,11 @@ private func ensureConversationObservation(
             ChatState.ConversationRow(
                 conversationID: $0.conversationID,
                 title: $0.title ?? $0.conversationID,
-                preview: $0.lastMessagePreview ?? ""
+                preview: $0.lastMessagePreview ?? "",
+                unreadCount: $0.unreadCount,
+                lastMessageAt: $0.lastMessageAt.map {
+                    Date(timeIntervalSince1970: Double($0) / 1000)
+                }
             )
         }
         Task { @MainActor in
@@ -392,13 +449,16 @@ private func mapMessageRows(
     myUserID: Int64
 ) -> [ChatState.MessageRow] {
     records.map { record in
-        let text = extractText(from: record.content)
+        let isImage = record.messageType == "image"
+        let text = isImage ? "[图片]" : extractText(from: record.content)
         return ChatState.MessageRow(
             clientMessageID: record.clientMessageID,
             serverMessageID: record.serverMessageID,
             text: text,
             status: record.status,
-            isMine: record.senderUserID == myUserID
+            isMine: record.senderUserID == myUserID,
+            messageType: record.messageType,
+            imageObjectKey: isImage ? ImageMessageContent.parseObjectKey(from: record.content) : nil
         )
     }
 }

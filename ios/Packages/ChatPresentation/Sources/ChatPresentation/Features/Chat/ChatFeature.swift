@@ -23,6 +23,22 @@ public struct ChatState: Equatable, Sendable {
         public let conversationID: String
         public let title: String
         public let preview: String
+        public let unreadCount: Int
+        public let lastMessageAt: Date?
+
+        public init(
+            conversationID: String,
+            title: String,
+            preview: String,
+            unreadCount: Int = 0,
+            lastMessageAt: Date? = nil
+        ) {
+            self.conversationID = conversationID
+            self.title = title
+            self.preview = preview
+            self.unreadCount = unreadCount
+            self.lastMessageAt = lastMessageAt
+        }
     }
 
     public struct MessageRow: Equatable, Sendable, Identifiable {
@@ -32,6 +48,28 @@ public struct ChatState: Equatable, Sendable {
         public let text: String
         public let status: String
         public let isMine: Bool
+        public let messageType: String
+        public let imageObjectKey: String?
+
+        public init(
+            clientMessageID: String,
+            serverMessageID: String?,
+            text: String,
+            status: String,
+            isMine: Bool,
+            messageType: String = "text",
+            imageObjectKey: String? = nil
+        ) {
+            self.clientMessageID = clientMessageID
+            self.serverMessageID = serverMessageID
+            self.text = text
+            self.status = status
+            self.isMine = isMine
+            self.messageType = messageType
+            self.imageObjectKey = imageObjectKey
+        }
+
+        public var isImage: Bool { messageType == "image" }
     }
 
     public init(
@@ -73,6 +111,7 @@ public enum ChatAction: Sendable {
     case leaveConversation
     case updateDraft(String)
     case sendTapped
+    case sendImageTapped(Data, width: Int, height: Int, mimeType: String, fileName: String)
     case loadOlderMessagesTapped
     case retryQueuedTapped
     case syncTapped
@@ -102,7 +141,8 @@ public enum ChatAction: Sendable {
 public enum ChatFeature {
     public static let reducer: Reducer<ChatState, ChatAction> = { state, action in
         switch action {
-        case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .loadOlderMessagesTapped, .retryQueuedTapped,
+        case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .sendImageTapped,
+             .loadOlderMessagesTapped, .retryQueuedTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:

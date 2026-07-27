@@ -82,6 +82,26 @@ cd ../ChatPresentation && swift test
 
 | 已有 | 未有 |
 |------|------|
-| 0038–0042 主链路 | 图片消息 |
-| mock push token + 本地静默注入 | 生产 APNs 证书 / 真推送联调 |
-| 前台 WS + 后台 sync | 客户端缺口探测、已读 UI |
+| 0038–0042 主链路 | 生产 APNs 证书 / 真推送联调 |
+| 会话列表 UI（标题/预览/时间/未读） | 已读回执精细 UI |
+| 图片消息（0049：选图→上传→气泡缩略） | 视频 / 原图浏览 |
+| mock push token + 本地静默注入 | — |
+| 前台 WS + 后台 sync + 缺口补拉 | — |
+
+---
+
+## 6. 图片消息联调（0049）
+
+1. 双端登录，打开同一 1:1  
+2. A 在会话点相册图标选图 → 发送  
+3. A 气泡应出现缩略图（本地缓存，不卡列表）  
+4. B 经 WS 或 sync 后可见 `[图片]` 气泡并加载缩略（download/auth；缩略解码）  
+5. 快速滚动离屏：加载 Task 应取消（Instruments 可选）
+
+服务端需 message-service（含媒体本地 store + thumbnail worker）。
+
+---
+
+## 7. 横切验收（0050）
+
+结论与步骤见 [ios-high-load-client.md](./ios-high-load-client.md)「建议的横切验收项」。

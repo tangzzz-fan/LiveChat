@@ -9,7 +9,7 @@ import Foundation
 //
 // 正式保留：AuthRepository；传输缝 WebSocketTransport（Infra）。
 // 禁止空壳 MessageRepositoryLive 等 Adapter 凑 conform。
-// MediaRepository 留给 0049（未实现）。
+// MediaRepository：0049 已由 MediaAPI 实现（upload + download/auth）。
 // 对照：docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md
 
 // MARK: - Fine-grained ports（0052）
@@ -210,10 +210,14 @@ public struct WebSocketFrame: Sendable {
     }
 }
 
-/// 留给 0049；服务端媒体 API 已就绪（0014）。未实现。
+/// 图片媒体端口（0049）。上传走 initiate → PUT parts → complete；下载走 download/auth。
 public protocol MediaRepository: Sendable {
-    func uploadImage(_ data: Data, metadata: ImageMetadata) async throws -> Attachment
-    func downloadImage(objectKey: String) async throws -> Data
+    func uploadImage(
+        _ data: Data,
+        metadata: ImageMetadata,
+        conversationID: String
+    ) async throws -> Attachment
+    func downloadImage(objectKey: String, conversationID: String) async throws -> Data
 }
 
 public struct ImageMetadata: Codable, Sendable {
