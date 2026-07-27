@@ -1,6 +1,9 @@
 # iOS 多端接入：能力评估与实现路径
 
-结合 [`Specs/13-iOS客户端架构设计.md`](../Specs/13-iOS客户端架构设计.md)、现有 `ios/` 骨架（ticket 0021）与服务端 Phase 1–3，回答两件事：
+> **状态（2026-07）**：本文写于旧骨架 0021 / 重写前。客户端已按 [0035](../issues/0035-ios-client-rewrite.md) 重写；登录 / 发送 / sync / WS（0038–0041）已落地。  
+> **请改读**：[ios-client-rewrite.md](./ios-client-rewrite.md) · [ios-client-study-guide.md](./ios-client-study-guide.md) · [ios-app-testing.md](./ios-app-testing.md)。下文保留作历史评估，表格中「iOS 未接」等表述已过时。
+
+结合 [`specs/13-iOS客户端架构设计.md`](../specs/13-iOS客户端架构设计.md)、现有 `ios/` 骨架（ticket 0021）与服务端 Phase 1–3，回答两件事：
 
 1. **现在能不能**让几台 iOS 客户端连上并真正「用起来」？  
 2. **按 Spec 13 怎么落地**，缺口补什么、建议实现顺序是什么？

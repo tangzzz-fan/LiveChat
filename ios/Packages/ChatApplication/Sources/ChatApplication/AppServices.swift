@@ -13,8 +13,9 @@ public struct AppServices: Sendable {
     public let syncExecutor: SyncExecutor
     public let realtime: RealtimeSession
     public let gatewayWSURL: URL
-    /// 保证 RealtimeSession.events 只被消费一次。
     public let realtimeListenGate: RealtimeListenGate
+    public let pushTokenAPI: PushTokenAPI
+    public let silentWake: SilentSyncWakeHandler
 
     public init(
         database: LocalDatabase,
@@ -27,7 +28,9 @@ public struct AppServices: Sendable {
         syncExecutor: SyncExecutor,
         realtime: RealtimeSession,
         gatewayWSURL: URL,
-        realtimeListenGate: RealtimeListenGate = RealtimeListenGate()
+        realtimeListenGate: RealtimeListenGate = RealtimeListenGate(),
+        pushTokenAPI: PushTokenAPI,
+        silentWake: SilentSyncWakeHandler
     ) {
         self.database = database
         self.auth = auth
@@ -40,6 +43,8 @@ public struct AppServices: Sendable {
         self.realtime = realtime
         self.gatewayWSURL = gatewayWSURL
         self.realtimeListenGate = realtimeListenGate
+        self.pushTokenAPI = pushTokenAPI
+        self.silentWake = silentWake
     }
 
     public static func make(
@@ -56,6 +61,8 @@ public struct AppServices: Sendable {
         let syncAPI = SyncAPI(http: http, session: session)
         let syncExecutor = SyncExecutor(database: db, api: syncAPI, session: session)
         let realtime = RealtimeSession(gatewayURL: gatewayWSURL, database: db, session: session)
+        let pushTokenAPI = PushTokenAPI(http: http, session: session)
+        let silentWake = SilentSyncWakeHandler(syncExecutor: syncExecutor)
         return AppServices(
             database: db,
             auth: auth,
@@ -66,7 +73,9 @@ public struct AppServices: Sendable {
             sendExecutor: sendExecutor,
             syncExecutor: syncExecutor,
             realtime: realtime,
-            gatewayWSURL: gatewayWSURL
+            gatewayWSURL: gatewayWSURL,
+            pushTokenAPI: pushTokenAPI,
+            silentWake: silentWake
         )
     }
 }

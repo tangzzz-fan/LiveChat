@@ -36,11 +36,11 @@
 | [0032](0032-send-side-outbox-backpressure.md) | 发送侧背压：outbox pending 超阈返回 429 | complete | `done`, `p0` | 2026-07-26 |
 | [0033](0033-ios-high-load-client-design.md) | iOS 高负载/弱网客户端方案与坑点（文档先行） | complete | `done`, `p0` | 2026-07-26 |
 | [0034](0034-loadtest-protobuf-ws-handshake.md) | 压测客户端补齐 protobuf WS 握手：覆盖握手之后的行为 | complete | `done`, `p1` | 2026-07-26 |
-| [0035](0035-ios-client-rewrite.md) | iOS 客户端从零重写：SPM 多包 + GRDB + TGReduxKit + 薄 App | open | `ready-for-agent`, `p0` | 2026-07-26 |
+| [0035](0035-ios-client-rewrite.md) | iOS 客户端从零重写：SPM 多包 + GRDB + TGReduxKit + 薄 App | complete | `done`, `p0` | 2026-07-26 |
 | [0036](0036-ios-rewrite-design.md) | iOS 重写设计：Spec 13 修订 + 决策文档（Redux/WS/后台） | complete | `done`, `p0` | 2026-07-26 |
 | [0037](0037-ios-spm-scaffold.md) | iOS SPM 脚手架：清空重写 + 本地依赖；HITL 创建 Xcode 工程 | complete | `done`, `p0`, `blocked-by:0036` | 2026-07-26 |
 | [0038](0038-ios-auth-otp-keychain-login.md) | iOS 登录：OTP + Keychain + 最小登录 UI（重写） | complete | `done`, `p0` | 2026-07-27 |
 | [0039](0039-ios-local-first-send-direct.md) | iOS 本地优先发文本 + 1:1 会话（GRDB + HTTP） | complete | `done`, `p0`, `blocked-by:0038` | 2026-07-27 |
 | [0040](0040-ios-incremental-sync.md) | iOS 增量同步：SyncExecutor + 游标 | complete | `done`, `p0`, `blocked-by:0039` | 2026-07-27 |
 | [0041](0041-ios-websocket-realtime.md) | iOS WebSocket 实时投递：protobuf 握手 + MESSAGE_DELIVERY | complete | `done`, `p0`, `blocked-by:0040` | 2026-07-27 |
-| [0042](0042-ios-push-token-silent-sync.md) | iOS Push Token + 静默唤醒触发 sync | open | `ready-for-agent`, `p0`, `blocked-by:0040,0041` | 2026-07-27 |
+| [0042](0042-ios-push-token-silent-sync.md) | iOS Push Token + 静默唤醒触发 sync | complete | `done`, `p0`, `blocked-by:0040,0041` | 2026-07-27 |

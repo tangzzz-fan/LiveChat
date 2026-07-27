@@ -1,8 +1,12 @@
-# iOS App 测试方法（截至 0041）
+# iOS App 测试方法（截至 0042）
 
-面向本机联调：OTP 登录（0038）、本地优先发文本 / 1:1（0039）、增量 sync（0040）、**WebSocket 实时（0041）**。
+面向本机联调：OTP（0038）、发送（0039）、sync（0040）、WS 实时（0041）、**Push Token + 静默唤醒 sync（0042）**。
 
-相关：[`API参考.md`](./API参考.md) · [`ios/README.md`](../ios/README.md) · [`ios-client-rewrite.md`](./ios-client-rewrite.md)
+相关：
+- 联调操作：本文  
+- **0041 测试如何设计**：[ios-0041-realtime-test-design.md](./ios-0041-realtime-test-design.md)  
+- 复习 / 边界：[ios-client-study-guide.md](./ios-client-study-guide.md)  
+- API：[API参考.md](./API参考.md)
 
 ---
 
@@ -10,58 +14,50 @@
 
 | 项 | 要求 |
 |----|------|
-| PostgreSQL | 本机 `localhost:5432`，已 `make migrate-up` |
-| Redis | 本机 `localhost:6379` |
-| message-service | `http://127.0.0.1:8080` |
-| **outbox-consumer** | 必开（fanout → sync_events + 在线投递） |
-| **gateway** | **0041 必开**：`ws://127.0.0.1:8081/ws` |
+| PostgreSQL / Redis | 本机已起，已 `make migrate-up` |
+| message-service | `:8080` |
+| outbox-consumer | 必开 |
+| gateway | 0041/前台实时必开；**纯静默 sync 演示可不启** |
 | 模拟器 | iPhone 17 Pro + Pro Max |
-| Bundle ID | `com.tango.LiveChat` |
 
 ```bash
 cd livechat-server
 make migrate-up
-make run-message-service    # :8080
+make run-message-service
 make run-outbox-consumer
-make run-gateway            # :8081 WebSocket
-```
-
-Proto 生成（变更 `ws_frame.proto` 后）：
-
-```bash
-# brew install protobuf swift-protobuf
-./ios/scripts/gen_proto.sh
-# 输出：ios/Packages/ChatInfrastructure/Sources/ChatInfrastructure/Generated/ws_frame.pb.swift
+make run-gateway   # 前台实时需要
 ```
 
 ---
 
-## 2. 手机号与验证码
+## 2. 推荐联调剧本
 
-推荐：`+8613800000001` / `+8613800000002`，验证码 `123456`。须 E.164（以 `+` 开头）。
+### 2.1 登录 + Push Token（0042）
+
+双机登录后，首页「推送 / 静默唤醒」应出现 `push_token 已注册 · sim-mock-…`（登录自动注册 mock）。  
+也可再点「注册 Push Token（mock）」。
+
+服务端设备行应有 `push_token`（可用 DB 或后续扩展设备列表展示）。
+
+### 2.2 实时（0041）— 详见设计文档
+
+主信号：B **不点同步** 也能看到 A 的消息。步骤与反例树见 [ios-0041-realtime-test-design.md](./ios-0041-realtime-test-design.md)。
+
+### 2.3 静默唤醒 → sync（0042）
+
+模拟器无真实 APNs，用 **本地注入** 演示同一路径：
+
+1. B 进后台（WS 断开）  
+2. A 发送一条新消息（确保 outbox-consumer 跑完）  
+3. B 回前台**之前**，或保持后台逻辑上：在 B 点 **「模拟静默唤醒 → sync」**  
+4. 期望：`已同步 +N · cursor …`，会话/气泡出现 `server_message_id`  
+5. **不应**依赖此时 WS 已连接（横幅可为断开）
+
+真机可选：系统 Silent Push → `AppDelegate.didReceiveRemoteNotification` → 同一 `SilentSyncWakeHandler`。
 
 ---
 
-## 3. 推荐联调剧本
-
-### 3.1 登录
-
-双模拟器分别登录上述两号，记下各自 `user_id`。首页应出现 `WS 已连接 · …`。
-
-### 3.2 实时投递（0041）
-
-1. A 打开与 B 的 1:1，发送文本 → `accepted`  
-2. **B 保持前台、不点手动同步**  
-3. 期望：B 会话列表 / 聊天页很快出现消息，气泡副标题为 `server_message_id`  
-4. 进后台：B 显示 `WS 已断开（后台）`；回前台：重连 + 立刻 sync
-
-### 3.3 增量同步兜底（0040）
-
-离线期间漏收的消息：回前台或「手动同步」仍可补齐。
-
----
-
-## 4. 包级测试
+## 3. 包级测试
 
 ```bash
 cd ios/Packages/ChatDomain && swift test
@@ -72,21 +68,20 @@ cd ../ChatPresentation && swift test
 
 ---
 
-## 5. 常见失败速查
+## 4. 常见失败速查
 
 | 现象 | 可能原因 |
 |------|----------|
-| WS 一直连接中 / 握手失败 | gateway 未启；token 失效 |
-| B 收不到实时消息 | outbox-consumer 未启；B 在后台已断开 |
-| 同步 +0 无消息 | fanout 未写 sync_events |
-| 登录 Connection refused | message-service 未起 |
+| 无 push_token 横幅 | 未登录 / POST push-token 失败 |
+| 模拟静默 +0 | outbox 未消费；或消息已 sync 过 |
+| 期望后台靠 WS 收消息 | 与 Spec 13 不符；应靠 sync/Push |
 
 ---
 
-## 6. 能力边界（当前）
+## 5. 能力边界
 
 | 已有 | 未有 |
 |------|------|
-| OTP + 本地优先发送 | Push 静默唤醒（0042） |
-| 增量 sync | 图片消息 |
-| 前台 WS 实时 + 后台断开 | |
+| 0038–0042 主链路 | 图片消息 |
+| mock push token + 本地静默注入 | 生产 APNs 证书 / 真推送联调 |
+| 前台 WS + 后台 sync | 客户端缺口探测、已读 UI |

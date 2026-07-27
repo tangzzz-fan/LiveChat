@@ -34,7 +34,7 @@ Package 引用示例（相对路径按仓库实际布局调整）：
 ```
 
 **默认不引入**：Alamofire、Starscream、gRPC-Swift、KeychainAccess（Keychain 自写薄封装）。  
-**非 SPM 工具**：`protoc` + `protoc-gen-swift`（`brew install protobuf swift-protobuf`）；生成的 `.pb.swift` 建议入库，日常可离线编。
+**非 SPM 工具**：`protoc` + `protoc-gen-swift`（`brew install protobuf swift-protobuf`）；生成的 `.pb.swift` **入库**（`ChatInfrastructure/Generated/`），日常可离线编。流程与踩坑见 [工程问题 18](./engineering-problems/18-swift-protobuf-codegen-workflow.md)。
 
 Starscream / NWConnection：**仅当实测撞到原生 WS 硬限时**再加实现类，不改上层。
 
@@ -74,6 +74,8 @@ protocol WebSocketTransport {
 
 应用层心跳（协议 opcode）+ `NWPathMonitor` 兜底原生断线检测弱点。
 
+实现注意（0041）：**每次重连新建** `URLSessionWebSocketTransport`；`AsyncStream` 单消费者；详见 [工程问题 17](./engineering-problems/17-urlsession-websocket-lifecycle-asyncstream.md)。帧边界与「粘包」澄清见 [工程问题 16](./engineering-problems/16-websocket-framing-vs-tcp-sticky-packets.md)。
+
 ## 5. 前台长连 / 后台唤醒
 
 与真实 IM 一致，也与 Spec 13 §8.2 修订一致：
@@ -105,3 +107,5 @@ Agent 侧负责：清空旧 `ios/`、写好各 package 的 `Package.swift` 与�
 | [0036](../issues/0036-ios-rewrite-design.md) | 本决策落入 Spec + 本文 |
 | [0037](../issues/0037-ios-spm-scaffold.md) | 脚手架 ✅ |
 | [0038](../issues/0038-ios-auth-otp-keychain-login.md)–[0042](../issues/0042-ios-push-token-silent-sync.md) | 登录 → 发送 → sync → WS → Push |
+
+**复习入口（0041 后）**：[ios-client-study-guide.md](./ios-client-study-guide.md)（票→文档对照、收发边界清单）· 工程问题 [16](./engineering-problems/16-websocket-framing-vs-tcp-sticky-packets.md) / [17](./engineering-problems/17-urlsession-websocket-lifecycle-asyncstream.md) / [18](./engineering-problems/18-swift-protobuf-codegen-workflow.md)。

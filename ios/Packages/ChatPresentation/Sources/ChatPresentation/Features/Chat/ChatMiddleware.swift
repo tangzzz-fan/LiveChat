@@ -206,6 +206,50 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                 await services.realtime.stop(reason: "background")
                 await store.dispatch(.chat(.setConnectionBanner("WS 已断开（后台）")))
             }
+        case .registerPushTokenTapped:
+            guard store.state.isLoggedIn else { return }
+            store.runTask(id: CancellationID("chat.push.register")) {
+                do {
+                    let deviceID = try services.auth.currentDeviceID()
+                    // 模拟器无真实 APNs 时仍注册 mock token，便于服务端 devices.push_token 有值。
+                    let token = PushTokenFactory.mockToken(deviceID: deviceID)
+                    try await services.pushTokenAPI.register(pushToken: token)
+                    await store.dispatch(
+                        .chat(.setPushTokenBanner("push_token 已注册 · \(String(token.prefix(24)))…"))
+                    )
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
+        case .pushTokenReceived(let token):
+            store.runTask(id: CancellationID("chat.push.apns")) {
+                do {
+                    try await services.pushTokenAPI.register(pushToken: token)
+                    await store.dispatch(
+                        .chat(.setPushTokenBanner("APNs token 已上报 · \(String(token.prefix(16)))…"))
+                    )
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
+        case .silentPushWakeTapped:
+            store.dispatch(.chat(.silentPushWake(reason: "ui_inject")))
+        case .silentPushWake(let reason):
+            // Spec 13 §8.2：唤醒只跑增量 sync，不启动 WS、不做大媒体。
+            store.runTask(id: CancellationID("chat.push.silentWake")) {
+                await store.dispatch(.chat(.syncStarted))
+                let outcome = await services.silentWake.handleWake(reason: reason)
+                switch outcome {
+                case .success(let result):
+                    await store.dispatch(
+                        .chat(.syncFinished(applied: result.appliedCount, cursor: result.cursor))
+                    )
+                    // 轻量投影刷新（列表）；避免后台重 UI。
+                    await refreshLocalProjections(store: store, services: services)
+                case .failure(let error):
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
         default:
             break
         }

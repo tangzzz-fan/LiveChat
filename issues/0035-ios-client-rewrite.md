@@ -1,8 +1,8 @@
 ---
 id: "0035"
 title: "iOS 客户端从零重写：SPM 多包 + GRDB + TGReduxKit + 薄 App"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["done", "p0"]
 parent: null
 blocked_by: []
 created_at: 2026-07-26
@@ -34,7 +34,9 @@ created_at: 2026-07-26
 - [x] 旧 iOS 功能票已 `superseded`，INDEX 指向新父票
 - [x] 功能垂直切片在 0037 后另开（0038–0042；不复活 0022–0028）
 - [x] 导航文档指向本文档与新票
-- [ ] 0038–0041 完成（主链路可演示）；0042 完成或明确延期说明
+- [x] 0038–0041 完成（主链路可演示）；0042 完成或明确延期说明
+
+> 0038–0042 全部 complete。复习：[docs/ios-client-study-guide.md](../docs/ios-client-study-guide.md)；0041 测试设计：[docs/ios-0041-realtime-test-design.md](../docs/ios-0041-realtime-test-design.md)。
 
 ## Blocked by
 
@@ -48,9 +50,9 @@ None — 子票可立即启动。
 | [0037](0037-ios-spm-scaffold.md) | SPM 脚手架 + Xcode 工程 | complete |
 | [0038](0038-ios-auth-otp-keychain-login.md) | OTP 登录 + Keychain | complete |
 | [0039](0039-ios-local-first-send-direct.md) | 本地优先发文本 + 1:1 | complete |
-| [0040](0040-ios-incremental-sync.md) | 增量 sync | open |
-| [0041](0041-ios-websocket-realtime.md) | WS 实时投递 | open |
-| [0042](0042-ios-push-token-silent-sync.md) | Push + 静默 sync | open |
+| [0040](0040-ios-incremental-sync.md) | 增量 sync | complete |
+| [0041](0041-ios-websocket-realtime.md) | WS 实时投递 | complete |
+| [0042](0042-ios-push-token-silent-sync.md) | Push + 静默 sync | complete |
 
 依赖：`0038 → 0039 → 0040 → 0041`；`0042` blocked by `0040`+`0041`。图片消息本轮不拆。
 

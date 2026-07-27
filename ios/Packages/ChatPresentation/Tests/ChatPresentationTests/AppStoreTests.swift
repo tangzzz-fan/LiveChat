@@ -20,6 +20,15 @@ func authPhaseMovesToCode() {
 
 @Test
 @MainActor
+func logoutClearsChatState() {
+    let store = AppStoreFactory.make()
+    store.dispatch(.chat(.updateDraft("x")))
+    store.dispatch(.auth(.loggedOut))
+    #expect(store.state.chat.composeDraft.isEmpty)
+}
+
+@Test
+@MainActor
 func syncFinishedUpdatesBanner() {
     let store = AppStoreFactory.make()
     store.dispatch(.chat(.syncStarted))
@@ -30,3 +39,10 @@ func syncFinishedUpdatesBanner() {
     #expect(store.state.chat.syncBanner?.contains("7") == true)
 }
 
+@Test
+@MainActor
+func pushTokenBannerUpdates() {
+    let store = AppStoreFactory.make()
+    store.dispatch(.chat(.setPushTokenBanner("push_token 已注册")))
+    #expect(store.state.chat.pushTokenBanner?.contains("push_token") == true)
+}

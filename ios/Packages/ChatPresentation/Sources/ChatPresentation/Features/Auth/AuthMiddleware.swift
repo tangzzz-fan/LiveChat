@@ -21,6 +21,7 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                         await loadDevices(store: store, services: services, token: session.accessToken)
                         await store.dispatch(.chat(.syncTapped))
                         await store.dispatch(.chat(.realtimeEnsureStarted))
+                        await store.dispatch(.chat(.registerPushTokenTapped))
                     } else {
                         await store.dispatch(.auth(.setDeviceBanner("device: \(deviceID)")))
                     }
@@ -58,6 +59,7 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await loadDevices(store: store, services: services, token: tokens.accessToken)
                     await store.dispatch(.chat(.syncTapped))
                     await store.dispatch(.chat(.realtimeEnsureStarted))
+                    await store.dispatch(.chat(.registerPushTokenTapped))
                 } catch {
                     await store.dispatch(.auth(.failed(error.localizedDescription)))
                 }

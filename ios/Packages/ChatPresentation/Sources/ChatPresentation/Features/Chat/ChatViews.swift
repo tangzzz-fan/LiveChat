@@ -77,6 +77,22 @@ public struct ConversationListView: View {
                 .disabled(store.state.chat.isSyncing)
             }
 
+            Section("推送 / 静默唤醒") {
+                if let banner = store.state.chat.pushTokenBanner {
+                    Text(banner).font(.caption.monospaced())
+                }
+                Text("后台不硬撑 WS；静默唤醒只跑增量 sync（Spec 13 §8.2）")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Button("注册 Push Token（mock）") {
+                    store.dispatch(.chat(.registerPushTokenTapped))
+                }
+                Button("模拟静默唤醒 → sync") {
+                    store.dispatch(.chat(.silentPushWakeTapped))
+                }
+                .disabled(store.state.chat.isSyncing)
+            }
+
             Section("设备") {
                 ForEach(store.state.auth.deviceSummaries, id: \.self) { line in
                     Text(line).font(.caption.monospaced())

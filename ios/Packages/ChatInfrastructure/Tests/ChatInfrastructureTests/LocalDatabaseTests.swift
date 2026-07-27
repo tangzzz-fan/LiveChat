@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import ChatInfrastructure
 
 @Test
@@ -71,6 +72,13 @@ func wsCodecRoundTripHandshake() throws {
     #expect(decoded.accessToken == "tok")
     #expect(decoded.deviceID == "ios-a")
     #expect(decoded.lastEventSeq == 7)
+}
+
+@Test
+func pushTokenFactoryIsStable() {
+    let token = PushTokenFactory.mockToken(deviceID: "ios-abc")
+    #expect(token == "sim-mock-ios-abc")
+    #expect(PushTokenFactory.hexToken(from: Data([0x0a, 0xff])) == "0aff")
 }
 
 @Test

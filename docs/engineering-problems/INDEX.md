@@ -60,4 +60,7 @@
 | 13 | [下载 URL 的签名安全：为什么不能直接暴露对象存储路径](13-download-url-hmac-signing.md) | `security`, `durability` | 媒体 URL 不能直接暴露存储路径——每次下载需校验会话成员资格。HMAC-SHA256 签名 URL + 过期时间 + `hmac.Equal` 常量时间比较。含 S3 Presigned URL vs 自签名对比。 |
 | 14 | [跨服务 Trace 传递：为什么 slog 里有 trace_id 仍拼不成完整调用链](14-cross-service-trace-propagation.md) | `observability` | HTTP → gRPC → Outbox → Fanout 的 trace_id/span_id 传递与拼接。 |
 | 15 | [高并发故障模式：IM 系统里什么会先崩](15-high-concurrency-failure-modes.md) | `scale`, `connection`, `fanout` | 对照 Spec 01 容量假设做放大因子推演；串联重连风暴、热点群、Outbox 背压与现有压测/演练缺口。 |
+| 16 | [WebSocket 帧边界：为什么不是 TCP 粘包，却仍会踩边界](16-websocket-framing-vs-tcp-sticky-packets.md) | `connection`, `ordering`, `idempotency` | URLSessionWebSocket 已是 message 边界；本仓 1 WS message = 1 WsFrame。真正要防的是双通道重复、错误长度前缀、超大帧——不是手写 TCP 粘包。 |
+| 17 | [原生 WebSocketTask 生命周期与 AsyncStream 单消费者陷阱](17-urlsession-websocket-lifecycle-asyncstream.md) | `connection` | Task/流不能当永续单例；每连新建 transport、单一读循环、订阅 Gate；同 CancellationID 会误杀唯一 listener。 |
+| 18 | [Swift Protobuf 生成入库与版本对齐](18-swift-protobuf-codegen-workflow.md) | `connection`, `observability` | schema 唯一源 + gen_proto 入库；工具链与 SPM 运行时版本、续行脚本坑、与 load_test 对照。 |
 | — | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 已识别的高并发概念与落地状态（随实现更新）。 |
