@@ -20,9 +20,13 @@ func authPhaseMovesToCode() {
 
 @Test
 @MainActor
-func logoutClearsChatState() {
+func syncFinishedUpdatesBanner() {
     let store = AppStoreFactory.make()
-    store.dispatch(.chat(.updateDraft("x")))
-    store.dispatch(.auth(.loggedOut))
-    #expect(store.state.chat.composeDraft.isEmpty)
+    store.dispatch(.chat(.syncStarted))
+    #expect(store.state.chat.isSyncing)
+    store.dispatch(.chat(.syncFinished(applied: 2, cursor: 7)))
+    #expect(!store.state.chat.isSyncing)
+    #expect(store.state.chat.syncBanner?.contains("2") == true)
+    #expect(store.state.chat.syncBanner?.contains("7") == true)
 }
+

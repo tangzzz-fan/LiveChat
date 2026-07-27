@@ -172,4 +172,71 @@ extension LocalDatabase {
                 .fetchAll(db)
         }
     }
+
+    public func getSyncCursor(userID: Int64, deviceID: String) throws -> Int64 {
+        try dbQueue.read { db in
+            let value = try Int64.fetchOne(
+                db,
+                sql: """
+                SELECT last_event_seq FROM sync_cursors
+                WHERE user_id = ? AND device_id = ?
+                """,
+                arguments: [userID, deviceID]
+            )
+            return value ?? 0
+        }
+    }
+
+    public func updateSyncCursor(userID: Int64, deviceID: String, lastEventSeq: Int64) throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO sync_cursors (user_id, device_id, last_event_seq, last_sync_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, device_id) DO UPDATE SET
+                  last_event_seq = MAX(sync_cursors.last_event_seq, excluded.last_event_seq),
+                  last_sync_at = excluded.last_sync_at
+                """,
+                arguments: [userID, deviceID, lastEventSeq, now]
+            )
+        }
+    }
+
+    /// 幂等写入对端消息：按 server_message_id 去重。
+    public func upsertIncomingMessage(from payload: MessageCreatedPayload) throws {
+        try dbQueue.write { db in
+            if let existing = try Int64.fetchOne(
+                db,
+                sql: "SELECT local_id FROM messages WHERE server_message_id = ?",
+                arguments: [payload.serverMessageID]
+            ), existing > 0 {
+                return
+            }
+            let clientID = "remote-\(payload.serverMessageID)"
+            let createdAt = payload.serverReceivedAtMs
+                ?? Int64(Date().timeIntervalSince1970 * 1000)
+            try db.execute(
+                sql: """
+                INSERT INTO messages (
+                  server_message_id, client_message_id, conversation_id, conversation_seq,
+                  sender_user_id, message_type, content, status, server_received_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(client_message_id) DO NOTHING
+                """,
+                arguments: [
+                    payload.serverMessageID,
+                    clientID,
+                    payload.conversationID,
+                    payload.conversationSeq,
+                    payload.senderUserID,
+                    payload.messageType,
+                    payload.content,
+                    MessageStatus.accepted.rawValue,
+                    payload.serverReceivedAtMs,
+                    createdAt,
+                ]
+            )
+        }
+    }
 }

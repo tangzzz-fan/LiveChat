@@ -62,12 +62,46 @@ public struct SyncEvent: Codable, Sendable {
     public let conversationID: String?
     public let eventType: String
     public let payload: String
+
+    public init(
+        eventSeq: Int64,
+        userID: Int64,
+        conversationID: String? = nil,
+        eventType: String,
+        payload: String
+    ) {
+        self.eventSeq = eventSeq
+        self.userID = userID
+        self.conversationID = conversationID
+        self.eventType = eventType
+        self.payload = payload
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case eventSeq = "event_seq"
+        case userID = "user_id"
+        case conversationID = "conversation_id"
+        case eventType = "event_type"
+        case payload
+    }
 }
 
 public struct SyncResponse: Codable, Sendable {
     public let events: [SyncEvent]
     public let hasMore: Bool
     public let latestEventSeq: Int64
+
+    public init(events: [SyncEvent], hasMore: Bool, latestEventSeq: Int64) {
+        self.events = events
+        self.hasMore = hasMore
+        self.latestEventSeq = latestEventSeq
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case events
+        case hasMore = "has_more"
+        case latestEventSeq = "latest_event_seq"
+    }
 }
 
 public protocol AuthRepository: Sendable {

@@ -1,8 +1,8 @@
 ---
 id: "0040"
 title: "iOS 增量同步：SyncExecutor + 游标"
-status: open
-labels: ["ready-for-agent", "p0"]
+status: complete
+labels: ["done", "p0"]
 parent: "0035"
 blocked_by: ["0039"]
 created_at: 2026-07-27
@@ -20,11 +20,11 @@ created_at: 2026-07-27
 
 ## Acceptance criteria
 
-- [ ] SyncRepository Live + SyncExecutor（启动、回前台、手动触发）
-- [ ] cursor 仅在成功 apply 后推进；缺口/失败不丢事件
-- [ ] 分批 apply + 让出主线程；首屏优先可见会话
-- [ ] 双模拟器：A 发送 → B sync → B 聊天页出现对应 `server_message_id`
-- [ ] 横切：sync 洪流不卡死 UI（可用 Instruments 或主观帧率说明）
+- [x] SyncRepository Live + SyncExecutor（启动、回前台、手动触发）
+- [x] cursor 仅在成功 apply 后推进；缺口/失败不丢事件
+- [x] 分批 apply + 让出主线程；首屏优先可见会话
+- [x] 双模拟器：A 发送 → B sync → B 聊天页出现对应 `server_message_id`
+- [x] 横切：sync 洪流不卡死 UI（可用 Instruments 或主观帧率说明）
 
 ## Blocked by
 
@@ -34,3 +34,10 @@ created_at: 2026-07-27
 
 - WS 与 sync 统一经领域事件写 DB（可为后续 0041 预留入口）。
 - 参考 Spec 13 §7、§8 与 ios-high-load-client「sync 追赶洪流」。
+
+## Implementation notes
+
+- `SyncAPI` + `SyncExecutor`：分页 `GET /v1/sync/events`，单事件成功后推进本地 `sync_cursors`。
+- 触发：登录/bootstrap、`scenePhase.active`、首页「手动同步」。
+- `message_created` → GRDB 入站消息（`remote-{server_message_id}`）+ 会话摘要；聊天气泡副标题展示 `server_message_id`。
+- **联调必须启 outbox-consumer**，否则对端无 sync_events。见 `docs/ios-app-testing.md`。

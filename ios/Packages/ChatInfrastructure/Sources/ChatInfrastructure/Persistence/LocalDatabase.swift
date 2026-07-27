@@ -12,7 +12,8 @@ public final class LocalDatabase: Sendable {
             try db.execute(sql: "PRAGMA foreign_keys = ON")
         }
         dbQueue = try DatabaseQueue(path: path, configuration: config)
-        try dbQueue.write { db in
+        // journal_mode 不能放在 write 事务里换 WAL。
+        try dbQueue.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA journal_mode = WAL")
         }
         try migrate()

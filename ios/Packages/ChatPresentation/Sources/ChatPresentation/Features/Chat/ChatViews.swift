@@ -64,6 +64,16 @@ public struct ConversationListView: View {
                 }
             }
 
+            Section("同步") {
+                if let banner = store.state.chat.syncBanner {
+                    Text(banner).font(.caption.monospaced())
+                }
+                Button(store.state.chat.isSyncing ? "同步中…" : "手动同步") {
+                    store.dispatch(.chat(.syncTapped))
+                }
+                .disabled(store.state.chat.isSyncing)
+            }
+
             Section("设备") {
                 ForEach(store.state.auth.deviceSummaries, id: \.self) { line in
                     Text(line).font(.caption.monospaced())
@@ -98,8 +108,8 @@ public struct ChatThreadView: View {
                     if message.isMine { Spacer(minLength: 40) }
                     VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
                         Text(message.text)
-                        Text(message.status)
-                            .font(.caption2)
+                        Text(message.serverMessageID ?? message.status)
+                            .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
                     }
                     .padding(8)

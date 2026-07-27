@@ -155,6 +155,30 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
                 }
             }
+        case .syncTapped, .sceneBecameActive:
+            guard store.state.isLoggedIn else { return }
+            let activeConversationID = store.state.chat.activeConversationID
+            store.runTask(id: CancellationID("chat.sync")) {
+                await store.dispatch(.chat(.syncStarted))
+                do {
+                    let result = try await services.syncExecutor.syncIncremental()
+                    await store.dispatch(
+                        .chat(.syncFinished(applied: result.appliedCount, cursor: result.cursor))
+                    )
+                    await store.dispatch(.chat(.refreshConversationsTapped))
+                    if let activeConversationID,
+                       let session = try? services.auth.restoredSession(),
+                       let messages = try? loadVisibleMessages(
+                           database: services.database,
+                           conversationID: activeConversationID,
+                           myUserID: session.userID
+                       ) {
+                        await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
+                    }
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
         default:
             break
         }
@@ -171,6 +195,7 @@ private func loadVisibleMessages(
         let text = extractText(from: record.content)
         return ChatState.MessageRow(
             clientMessageID: record.clientMessageID,
+            serverMessageID: record.serverMessageID,
             text: text,
             status: record.status,
             isMine: record.senderUserID == myUserID

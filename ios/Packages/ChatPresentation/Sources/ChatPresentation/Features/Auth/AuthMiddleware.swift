@@ -19,7 +19,7 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                             .auth(.sessionRestored(userID: session.userID, deviceID: deviceID))
                         )
                         await loadDevices(store: store, services: services, token: session.accessToken)
-                        await store.dispatch(.chat(.refreshConversationsTapped))
+                        await store.dispatch(.chat(.syncTapped))
                     } else {
                         await store.dispatch(.auth(.setDeviceBanner("device: \(deviceID)")))
                     }
@@ -55,7 +55,7 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                         .auth(.loginSucceeded(userID: tokens.userID, deviceID: deviceID))
                     )
                     await loadDevices(store: store, services: services, token: tokens.accessToken)
-                    await store.dispatch(.chat(.refreshConversationsTapped))
+                    await store.dispatch(.chat(.syncTapped))
                 } catch {
                     await store.dispatch(.auth(.failed(error.localizedDescription)))
                 }

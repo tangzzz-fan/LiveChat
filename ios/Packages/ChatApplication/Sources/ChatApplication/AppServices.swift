@@ -11,6 +11,7 @@ public struct AppServices: Sendable {
     public let conversations: ConversationAPI
     public let messages: MessageAPI
     public let sendExecutor: MessageSendExecutor
+    public let syncExecutor: SyncExecutor
 
     public init(
         database: LocalDatabase,
@@ -20,7 +21,8 @@ public struct AppServices: Sendable {
         session: SessionStore,
         conversations: ConversationAPI,
         messages: MessageAPI,
-        sendExecutor: MessageSendExecutor
+        sendExecutor: MessageSendExecutor,
+        syncExecutor: SyncExecutor
     ) {
         self.database = database
         self.transport = transport
@@ -30,6 +32,7 @@ public struct AppServices: Sendable {
         self.conversations = conversations
         self.messages = messages
         self.sendExecutor = sendExecutor
+        self.syncExecutor = syncExecutor
     }
 
     public static func make(
@@ -44,6 +47,8 @@ public struct AppServices: Sendable {
         let conversations = ConversationAPI(http: http, session: session)
         let messages = MessageAPI(http: http, session: session)
         let sendExecutor = MessageSendExecutor(database: db, api: messages)
+        let syncAPI = SyncAPI(http: http, session: session)
+        let syncExecutor = SyncExecutor(database: db, api: syncAPI, session: session)
         return AppServices(
             database: db,
             transport: transport,
@@ -52,7 +57,8 @@ public struct AppServices: Sendable {
             session: session,
             conversations: conversations,
             messages: messages,
-            sendExecutor: sendExecutor
+            sendExecutor: sendExecutor,
+            syncExecutor: syncExecutor
         )
     }
 }
