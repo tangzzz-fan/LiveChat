@@ -243,39 +243,49 @@ public struct ChatThreadView: View {
                 .disabled(store.state.chat.isBusy)
             }
 
-            List(store.state.chat.visibleMessages) { message in
-                HStack {
-                    if message.isMine { Spacer(minLength: 40) }
-                    VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
-                        if message.isImage, let objectKey = message.imageObjectKey {
-                            MessageImageBubble(
-                                objectKey: objectKey,
-                                conversationID: conversationID,
-                                media: media
-                            )
-                        } else {
-                            Text(message.text)
-                        }
-                        HStack(spacing: 4) {
-                            if message.isMine {
-                                Text(statusGlyph(for: message.status))
-                                    .font(.caption2)
-                                    .foregroundStyle(message.status == "read" ? Color.accentColor : Color.secondary)
+            ScrollViewReader { proxy in
+                List(store.state.chat.visibleMessages) { message in
+                    HStack {
+                        if message.isMine { Spacer(minLength: 40) }
+                        VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
+                            if message.isImage, let objectKey = message.imageObjectKey {
+                                MessageImageBubble(
+                                    objectKey: objectKey,
+                                    conversationID: conversationID,
+                                    media: media
+                                )
+                            } else {
+                                Text(message.text)
                             }
-                            Text(message.serverMessageID ?? message.status)
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            HStack(spacing: 4) {
+                                if message.isMine {
+                                    Text(statusGlyph(for: message.status))
+                                        .font(.caption2)
+                                        .foregroundStyle(message.status == "read" ? Color.accentColor : Color.secondary)
+                                }
+                                Text(message.serverMessageID ?? message.status)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
+                        .padding(8)
+                        .background(message.isMine ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        if !message.isMine { Spacer(minLength: 40) }
                     }
-                    .padding(8)
-                    .background(message.isMine ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    if !message.isMine { Spacer(minLength: 40) }
+                    .listRowSeparator(.hidden)
+                    .id(message.id)
                 }
-                .listRowSeparator(.hidden)
+                .listStyle(.plain)
+                .onAppear {
+                    scrollToLatest(proxy: proxy, animated: false)
+                }
+                // 仅当「列表尾部消息 id」变化时滚动（发送/接收）；加载更早不会改 last.id。
+                .onChange(of: store.state.chat.visibleMessages.last?.id) { _, _ in
+                    scrollToLatest(proxy: proxy, animated: true)
+                }
             }
-            .listStyle(.plain)
 
             HStack(spacing: 10) {
                 #if canImport(PhotosUI)
@@ -311,6 +321,20 @@ public struct ChatThreadView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("返回") { store.dispatch(.chat(.leaveConversation)) }
+            }
+        }
+    }
+
+    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool) {
+        guard let lastID = store.state.chat.visibleMessages.last?.id else { return }
+        // 等 List 完成布局后再滚，否则偶发停在旧位置。
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(lastID, anchor: .bottom)
             }
         }
     }
