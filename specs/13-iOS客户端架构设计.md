@@ -390,7 +390,7 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 | 消息长按菜单（复制 / 本地删除 / 失败重试） | — | ✓（0056） |
 | 消息多选（批量删除 / 转发入口） | — | ✓（0057） |
 | 转发 / 系统分享 | — | ✓（0058，可标 P2） |
-| 已发消息编辑 | — | 依赖服务端协议；先 spike（0059） |
+| 已发消息编辑 | — | 依赖服务端协议；**暂缓**（ADR 0005 / 0059） |
 | Notification Service Extension 解密 | — | ✓ |
 | E2EE 密钥管理 | — | ✓ |
 | 视频转码/内容审核 | — | ✓ |
