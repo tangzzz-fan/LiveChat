@@ -389,11 +389,20 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 | 发送中 loading + 取消发送（未 accepted 前） | — | ✓（0055，已实现） |
 | 消息长按菜单（复制 / 本地删除 / 失败重试） | — | ✓（0056） |
 | 消息多选（批量删除 / 转发入口） | — | ✓（0057） |
-| 转发 / 系统分享 | — | ✓（0058，可标 P2） |
+| 转发 / 系统分享 | — | ✓（0058） |
 | 已发消息编辑 | — | 依赖服务端协议；**暂缓**（ADR 0005 / 0059） |
 | Notification Service Extension 解密 | — | ✓ |
 | E2EE 密钥管理 | — | ✓ |
 | 视频转码/内容审核 | — | ✓ |
+
+### 9.1 转发与系统分享（0058）
+
+当前协议**没有**独立的 `forward` / 引用消息类型。客户端「转发」= 向目标会话**新发一条内容等价消息**：
+
+- 新建 `client_message_id`（幂等键不复用原消息）
+- 文本：复用 content 信封；图片：复用 attachment JSON（`object_key`），不强制再上传
+- **不等于**服务端「引用原 message_id」；对端收到的是普通 text/image 消息
+- 「分享」走系统 `UIActivityViewController`：文本明文；图片优先本地缓存 / 原会话授权下载，否则降级为占位文案
 
 ## 10. 流程描述
 
