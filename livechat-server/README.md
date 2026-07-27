@@ -199,8 +199,16 @@ curl -s "http://localhost:8080/v1/conversations/conv-abc/messages?from_seq=1&lim
 ```
 
 参数：
-- `from_seq` — conversation_seq 起点（默认 0）
+- `from_seq` — conversation_seq 起点（默认 0；`conversation_seq >= from_seq`，升序）
 - `limit` — 每页数量（默认 50，最大 100）
+
+响应字段：
+- `messages` — 本页消息
+- `latest_seq` — 该会话当前 `MAX(conversation_seq)`（空会话为 0；对齐 Spec 06 §4.4 的 expected_seq）
+- `has_more` — 本页是否可能还有后续（`len(messages) == limit`）
+
+打开会话取「最新一页」时：先读 `latest_seq`，再请求 `from_seq = max(1, latest_seq - limit + 1)`。  
+缺口补拉：若 `local_max_seq < latest_seq`，请求 `from_seq = local_max_seq + 1`。
 
 #### GET /v1/conversations — 会话列表
 

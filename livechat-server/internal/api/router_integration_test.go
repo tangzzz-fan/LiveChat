@@ -532,6 +532,8 @@ func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
 			ConversationSeq int64  `json:"conversation_seq"`
 			ServerMessageID string `json:"server_message_id"`
 		} `json:"messages"`
+		LatestSeq int64 `json:"latest_seq"`
+		HasMore   bool  `json:"has_more"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode messages response: %v", err)
@@ -541,6 +543,12 @@ func TestGetConversationMessagesSupportsGapRecoveryAndOrdering(t *testing.T) {
 	}
 	if resp.Messages[0].ConversationSeq != 2 || resp.Messages[1].ConversationSeq != 3 {
 		t.Fatalf("expected ordered seq 2,3 got %+v", resp.Messages)
+	}
+	if resp.LatestSeq != 3 {
+		t.Fatalf("expected latest_seq=3, got %d", resp.LatestSeq)
+	}
+	if !resp.HasMore {
+		t.Fatalf("expected has_more=true when page is full (limit=2)")
 	}
 }
 

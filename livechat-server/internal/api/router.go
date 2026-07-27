@@ -785,8 +785,17 @@ func handleGetMessages(svc *sync.Service) http.HandlerFunc {
 			messages = make([]domain.Message, 0)
 		}
 
+		latestSeq, err := svc.LatestConversationSeq(r.Context(), cid)
+		if err != nil {
+			slog.Error("latest conversation_seq", "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse("internal error"))
+			return
+		}
+
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"messages": messages,
+			"messages":    messages,
+			"latest_seq":  latestSeq,
+			"has_more":    len(messages) == limit,
 		})
 	}
 }

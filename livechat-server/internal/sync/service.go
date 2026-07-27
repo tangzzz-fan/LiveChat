@@ -175,6 +175,20 @@ func (s *Service) GetMessages(ctx context.Context, conversationID string, fromSe
 	return messages, rows.Err()
 }
 
+// LatestConversationSeq returns MAX(conversation_seq) for a conversation, or 0 if empty.
+// Spec 06 §4.4 uses this as expected_seq when clients detect gaps vs local_max_seq.
+func (s *Service) LatestConversationSeq(ctx context.Context, conversationID string) (int64, error) {
+	var latest int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(conversation_seq), 0) FROM messages WHERE conversation_id=$1`,
+		conversationID,
+	).Scan(&latest)
+	if err != nil {
+		return 0, fmt.Errorf("latest conversation_seq: %w", err)
+	}
+	return latest, nil
+}
+
 // VerifyMembership checks if a user is a member of a conversation.
 func (s *Service) VerifyMembership(ctx context.Context, userID int64, conversationID string) (bool, error) {
 	var ok bool
