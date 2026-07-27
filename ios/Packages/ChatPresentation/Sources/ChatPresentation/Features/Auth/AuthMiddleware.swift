@@ -20,6 +20,7 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                         )
                         await loadDevices(store: store, services: services, token: session.accessToken)
                         await store.dispatch(.chat(.syncTapped))
+                        await store.dispatch(.chat(.realtimeEnsureStarted))
                     } else {
                         await store.dispatch(.auth(.setDeviceBanner("device: \(deviceID)")))
                     }
@@ -56,12 +57,14 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     )
                     await loadDevices(store: store, services: services, token: tokens.accessToken)
                     await store.dispatch(.chat(.syncTapped))
+                    await store.dispatch(.chat(.realtimeEnsureStarted))
                 } catch {
                     await store.dispatch(.auth(.failed(error.localizedDescription)))
                 }
             }
         case .logoutTapped:
             store.runTask(id: CancellationID("auth.logout")) {
+                await services.realtime.stop(reason: "logout")
                 try? await services.auth.logout()
                 await store.dispatch(.auth(.loggedOut))
             }

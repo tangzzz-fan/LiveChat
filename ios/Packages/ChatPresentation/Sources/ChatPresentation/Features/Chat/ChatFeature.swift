@@ -66,6 +66,9 @@ public enum ChatAction: Sendable {
     case retryQueuedTapped
     case syncTapped
     case sceneBecameActive
+    case sceneBecameBackground
+    case realtimeEnsureStarted
+    case realtimeStop
 
     case busy(Bool)
     case failed(String)
@@ -83,7 +86,8 @@ public enum ChatFeature {
     public static let reducer: Reducer<ChatState, ChatAction> = { state, action in
         switch action {
         case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .retryQueuedTapped,
-             .syncTapped, .sceneBecameActive:
+             .syncTapped, .sceneBecameActive, .sceneBecameBackground,
+             .realtimeEnsureStarted, .realtimeStop:
             break
         case .setPeerUserIDInput(let value):
             state.peerUserIDInput = value

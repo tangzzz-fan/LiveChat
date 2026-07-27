@@ -179,9 +179,77 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
+            store.dispatch(.chat(.realtimeEnsureStarted))
+        case .sceneBecameBackground:
+            store.dispatch(.chat(.realtimeStop))
+        case .realtimeEnsureStarted:
+            guard store.state.isLoggedIn else { return }
+            if services.realtimeListenGate.beginIfNeeded() {
+                // 无 CancellationID：避免同 id 取消导致 AsyncStream 丢订阅。
+                store.runTask {
+                    for await event in await services.realtime.events {
+                        switch event {
+                        case .status(let status):
+                            await store.dispatch(.chat(.setConnectionBanner(banner(for: status))))
+                        case .databaseChanged:
+                            try? await Task.sleep(nanoseconds: 16_000_000)
+                            await refreshLocalProjections(store: store, services: services)
+                        }
+                    }
+                }
+            }
+            store.runTask(id: CancellationID("chat.realtime.start")) {
+                await services.realtime.start()
+            }
+        case .realtimeStop:
+            store.runTask(id: CancellationID("chat.realtime.stop")) {
+                await services.realtime.stop(reason: "background")
+                await store.dispatch(.chat(.setConnectionBanner("WS 已断开（后台）")))
+            }
         default:
             break
         }
+    }
+}
+
+private func banner(for status: RealtimeStatus) -> String {
+    switch status {
+    case .idle:
+        return "WS idle"
+    case .connecting:
+        return "WS 连接中…"
+    case .connected(let sessionID):
+        return "WS 已连接 · \(sessionID)"
+    case .reconnecting(let attempt):
+        return "WS 重连中 #\(attempt)"
+    case .disconnected(let reason):
+        return "WS 断开 · \(reason)"
+    }
+}
+
+@MainActor
+private func refreshLocalProjections(
+    store: Store<AppState, AppAction>,
+    services: AppServices
+) async {
+    guard let session = try? services.auth.restoredSession() else { return }
+    if let local = try? services.database.fetchConversationSummaries(userID: session.userID) {
+        let rows = local.map {
+            ChatState.ConversationRow(
+                conversationID: $0.conversationID,
+                title: $0.title ?? $0.conversationID,
+                preview: $0.lastMessagePreview ?? ""
+            )
+        }
+        await store.dispatch(.chat(.conversationsLoaded(rows)))
+    }
+    if let activeID = store.state.chat.activeConversationID,
+       let messages = try? loadVisibleMessages(
+           database: services.database,
+           conversationID: activeID,
+           myUserID: session.userID
+       ) {
+        await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
     }
 }
 

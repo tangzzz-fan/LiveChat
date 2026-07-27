@@ -206,37 +206,103 @@ extension LocalDatabase {
     /// 幂等写入对端消息：按 server_message_id 去重。
     public func upsertIncomingMessage(from payload: MessageCreatedPayload) throws {
         try dbQueue.write { db in
-            if let existing = try Int64.fetchOne(
-                db,
-                sql: "SELECT local_id FROM messages WHERE server_message_id = ?",
-                arguments: [payload.serverMessageID]
-            ), existing > 0 {
-                return
-            }
-            let clientID = "remote-\(payload.serverMessageID)"
-            let createdAt = payload.serverReceivedAtMs
-                ?? Int64(Date().timeIntervalSince1970 * 1000)
-            try db.execute(
-                sql: """
-                INSERT INTO messages (
-                  server_message_id, client_message_id, conversation_id, conversation_seq,
-                  sender_user_id, message_type, content, status, server_received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(client_message_id) DO NOTHING
-                """,
-                arguments: [
-                    payload.serverMessageID,
-                    clientID,
-                    payload.conversationID,
-                    payload.conversationSeq,
-                    payload.senderUserID,
-                    payload.messageType,
-                    payload.content,
-                    MessageStatus.accepted.rawValue,
-                    payload.serverReceivedAtMs,
-                    createdAt,
-                ]
-            )
+            try Self.upsertIncomingMessage(db: db, payload: payload)
         }
+    }
+
+    /// 批量落库投递帧（单事务），供 WS 突发路径使用。
+    public func applyIncomingDeliveries(
+        _ deliveries: [Livechat_Ws_WsMessageDelivery],
+        myUserID: Int64
+    ) throws -> [String] {
+        try dbQueue.write { db in
+            var touched = Set<String>()
+            for delivery in deliveries {
+                let payload = MessageCreatedPayload(
+                    serverMessageID: delivery.serverMessageID,
+                    conversationID: delivery.conversationID,
+                    conversationSeq: Int64(delivery.conversationSeq),
+                    senderUserID: Int64(delivery.senderUserID),
+                    senderDeviceID: delivery.senderDeviceID.isEmpty ? nil : delivery.senderDeviceID,
+                    messageType: delivery.messageType.isEmpty ? "text" : delivery.messageType,
+                    content: delivery.content,
+                    serverReceivedAtMs: delivery.serverReceivedAtMs == 0 ? nil : delivery.serverReceivedAtMs
+                )
+                try Self.upsertIncomingMessage(db: db, payload: payload)
+                let preview: String = {
+                    guard let data = payload.content.data(using: .utf8) else { return payload.content }
+                    struct Body: Decodable { let text: String? }
+                    if let body = try? JSONDecoder().decode(Body.self, from: data), let text = body.text {
+                        return text
+                    }
+                    return payload.content
+                }()
+                let now = Int64(Date().timeIntervalSince1970 * 1000)
+                let lastAt = payload.serverReceivedAtMs ?? now
+                try db.execute(
+                    sql: """
+                    INSERT INTO conversation_summaries (
+                      user_id, conversation_id, type, title, last_message_preview,
+                      last_message_at, unread_count, is_pinned, is_muted, updated_at
+                    ) VALUES (?, ?, 'direct', ?, ?, ?, ?, 0, 0, ?)
+                    ON CONFLICT(user_id, conversation_id) DO UPDATE SET
+                      title = COALESCE(excluded.title, conversation_summaries.title),
+                      last_message_preview = excluded.last_message_preview,
+                      last_message_at = excluded.last_message_at,
+                      unread_count = CASE
+                        WHEN ? = 0 THEN conversation_summaries.unread_count
+                        ELSE conversation_summaries.unread_count + 1
+                      END,
+                      updated_at = excluded.updated_at
+                    """,
+                    arguments: [
+                        myUserID,
+                        payload.conversationID,
+                        "user \(payload.senderUserID)",
+                        preview,
+                        lastAt,
+                        payload.senderUserID == myUserID ? 0 : 1,
+                        now,
+                        payload.senderUserID == myUserID ? 0 : 1,
+                    ]
+                )
+                touched.insert(payload.conversationID)
+            }
+            return Array(touched).sorted()
+        }
+    }
+
+    private static func upsertIncomingMessage(db: Database, payload: MessageCreatedPayload) throws {
+        if let existing = try Int64.fetchOne(
+            db,
+            sql: "SELECT local_id FROM messages WHERE server_message_id = ?",
+            arguments: [payload.serverMessageID]
+        ), existing > 0 {
+            return
+        }
+        let clientID = "remote-\(payload.serverMessageID)"
+        let createdAt = payload.serverReceivedAtMs
+            ?? Int64(Date().timeIntervalSince1970 * 1000)
+        try db.execute(
+            sql: """
+            INSERT INTO messages (
+              server_message_id, client_message_id, conversation_id, conversation_seq,
+              sender_user_id, message_type, content, status, server_received_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(client_message_id) DO NOTHING
+            """,
+            arguments: [
+                payload.serverMessageID,
+                clientID,
+                payload.conversationID,
+                payload.conversationSeq,
+                payload.senderUserID,
+                payload.messageType,
+                payload.content,
+                MessageStatus.accepted.rawValue,
+                payload.serverReceivedAtMs,
+                createdAt,
+            ]
+        )
     }
 }

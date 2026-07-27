@@ -52,4 +52,32 @@ func upsertIncomingMessageIsIdempotentByServerID() throws {
 @Test
 func swiftProtobufLinks() {
     #expect(ProtobufScaffold.libraryLinked)
+    // Empty Heartbeat may serialize to 0 bytes; still proves Generated types link.
+    _ = ProtobufScaffold.emptyMessageData()
+}
+
+@Test
+func wsCodecRoundTripHandshake() throws {
+    let req = WsCodec.makeHandshakeRequest(
+        accessToken: "tok",
+        deviceID: "ios-a",
+        lastEventSeq: 7
+    )
+    let data = try WsCodec.encodeFrame(opcode: WsOpcode.handshakeReq, payload: req, seqID: 1)
+    let frame = try WsCodec.decodeFrame(data)
+    #expect(frame.opcode == WsOpcode.handshakeReq)
+    #expect(frame.version == WsProtocol.version)
+    var decoded = try Livechat_Ws_HandshakeRequest(serializedBytes: frame.payload)
+    #expect(decoded.accessToken == "tok")
+    #expect(decoded.deviceID == "ios-a")
+    #expect(decoded.lastEventSeq == 7)
+}
+
+@Test
+func reconnectDelayStaysWithinWindow() {
+    for attempt in 0..<6 {
+        let delay = RealtimeSession.reconnectDelay(attempt: attempt)
+        #expect(delay >= 0.5)
+        #expect(delay <= 30.0)
+    }
 }

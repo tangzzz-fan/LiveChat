@@ -24,8 +24,15 @@ struct LiveChatApp: App {
                 .provideStore(store)
                 .task { store.dispatch(.auth(.bootstrap)) }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
+                    switch phase {
+                    case .active:
                         store.dispatch(.chat(.sceneBecameActive))
+                    case .background:
+                        store.dispatch(.chat(.sceneBecameBackground))
+                    case .inactive:
+                        break
+                    @unknown default:
+                        break
                     }
                 }
         }

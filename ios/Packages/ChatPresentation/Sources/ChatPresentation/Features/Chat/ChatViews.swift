@@ -65,6 +65,9 @@ public struct ConversationListView: View {
             }
 
             Section("同步") {
+                if let banner = store.state.chat.connectionBanner {
+                    Text(banner).font(.caption.monospaced())
+                }
                 if let banner = store.state.chat.syncBanner {
                     Text(banner).font(.caption.monospaced())
                 }

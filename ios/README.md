@@ -74,8 +74,10 @@ xcrun simctl launch booted com.tango.LiveChat
 - [0036](../issues/0036-ios-rewrite-design.md) / [0037](../issues/0037-ios-spm-scaffold.md) ✅  
 - [0038](../issues/0038-ios-auth-otp-keychain-login.md) OTP 登录 ✅  
 - [0039](../issues/0039-ios-local-first-send-direct.md) 本地优先发送 ✅  
-- **当前 frontier**：[0040](../issues/0040-ios-incremental-sync.md) 增量 sync  
-- 后续：0041 → 0042（见 [0035](../issues/0035-ios-client-rewrite.md)）
+- [0040](../issues/0040-ios-incremental-sync.md) 增量 sync ✅  
+- [0041](../issues/0041-ios-websocket-realtime.md) WebSocket 实时 ✅  
+- **当前 frontier**：[0042](../issues/0042-ios-push-token-silent-sync.md) Push Token + 静默 sync  
+- 父票：[0035](../issues/0035-ios-client-rewrite.md)
 
 ### Redux 模块边界
 

@@ -132,32 +132,11 @@ public actor SyncExecutor {
         case "message_created":
             guard let data = event.payload.data(using: .utf8) else { return nil }
             let payload = try JSONDecoder().decode(MessageCreatedPayload.self, from: data)
-            try database.upsertIncomingMessage(from: payload)
-            let preview = previewText(from: payload.content)
-            try database.upsertConversationSummary(
-                ConversationSummary(
-                    userID: myUserID,
-                    conversationID: payload.conversationID,
-                    type: "direct",
-                    title: "user \(payload.senderUserID)",
-                    lastMessagePreview: preview,
-                    lastMessageAt: Date(timeIntervalSince1970: Double(payload.serverReceivedAtMs ?? 0) / 1000),
-                    unreadCount: payload.senderUserID == myUserID ? 0 : 1
-                )
-            )
+            try IncomingMessageApplier.applyMessageCreated(payload, myUserID: myUserID, database: database)
             return payload.conversationID
         default:
             // 未知类型跳过但仍推进游标，避免卡死；后续票可扩展。
             return event.conversationID
         }
-    }
-
-    private func previewText(from content: String) -> String {
-        guard let data = content.data(using: .utf8) else { return content }
-        struct Payload: Decodable { let text: String? }
-        if let payload = try? JSONDecoder().decode(Payload.self, from: data), let text = payload.text {
-            return text
-        }
-        return content
     }
 }
