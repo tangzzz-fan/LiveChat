@@ -269,6 +269,15 @@ public struct ChatThreadView: View {
                             }
                             HStack(spacing: 4) {
                                 if message.isMine {
+                                    if message.status == "queued" || message.status == "sending" {
+                                        ProgressView()
+                                            .controlSize(.mini)
+                                        Button("取消") {
+                                            store.dispatch(.chat(.cancelSendTapped(message.clientMessageID)))
+                                        }
+                                        .font(.caption2)
+                                        .buttonStyle(.borderless)
+                                    }
                                     Text(statusGlyph(for: message.status))
                                         .font(.caption2)
                                         .foregroundStyle(message.status == "read" ? Color.accentColor : Color.secondary)
@@ -286,6 +295,12 @@ public struct ChatThreadView: View {
                             if !message.isImage {
                                 Button("复制") {
                                     store.dispatch(.chat(.copyMessageTapped(message.text)))
+                                }
+                            }
+                            if message.isMine,
+                               message.status == "queued" || message.status == "sending" {
+                                Button("取消发送", role: .destructive) {
+                                    store.dispatch(.chat(.cancelSendTapped(message.clientMessageID)))
                                 }
                             }
                             Button("删除", role: .destructive) {
@@ -441,6 +456,7 @@ public struct ChatThreadView: View {
         case "delivered": return "✓✓"
         case "read": return "✓✓"
         case "failed": return "!"
+        case "cancelled": return "×"
         default: return status
         }
     }

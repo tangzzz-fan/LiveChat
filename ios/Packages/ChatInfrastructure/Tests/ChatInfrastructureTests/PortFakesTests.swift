@@ -35,6 +35,56 @@ func fakeMessageRemoteHangTimesOutBackToQueued() async throws {
 }
 
 @Test
+func cancelSendDuringHangEndsCancelledAndDoesNotAutoRetry() async throws {
+    let db = try LocalDatabase.inMemory()
+    let remote = FakeMessageRemote(behavior: .hangThenFail)
+    let executor = MessageSendExecutor(
+        store: db,
+        remote: remote,
+        sendingTimeoutNanoseconds: 5_000_000_000 // 5s，远长于取消时机
+    )
+    let enqueue = Task {
+        try await executor.enqueueLocalThenSend(
+            Message(
+                clientMessageID: "cancel-1",
+                conversationID: "c-cancel",
+                senderUserID: 1,
+                messageType: "text",
+                content: #"{"text":"cancel me"}"#,
+                status: .queued
+            )
+        )
+    }
+    try await Task.sleep(nanoseconds: 30_000_000)
+    await executor.cancelSend(clientMessageID: "cancel-1")
+    _ = try? await enqueue.value
+
+    let status = try await db.dbQueue.read { database in
+        try String.fetchOne(
+            database,
+            sql: "SELECT status FROM messages WHERE client_message_id = ?",
+            arguments: ["cancel-1"]
+        )
+    }
+    #expect(status == MessageStatus.cancelled.rawValue)
+    // 取消后不应再被 process 拉起成 failed（hangThenFail 第二次）
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let statusAgain = try await db.dbQueue.read { database in
+        try String.fetchOne(
+            database,
+            sql: "SELECT status FROM messages WHERE client_message_id = ?",
+            arguments: ["cancel-1"]
+        )
+    }
+    #expect(statusAgain == MessageStatus.cancelled.rawValue)
+}
+
+@Test
+func cancelSendOnAcceptedIsNoOpForStatusMachine() async throws {
+    #expect(!MessageStatus.accepted.canTransition(to: .cancelled))
+}
+
+@Test
 func fakeSyncRemoteAdvancesCursorAfterApply() async throws {
     let db = try LocalDatabase.inMemory()
     let keychain = KeychainStore(service: "com.tango.LiveChat.test.sync.\(UUID().uuidString)")

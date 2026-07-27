@@ -37,6 +37,7 @@ public final class FakeMessageStore: MessageStore, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard var message = byClientID[clientMessageID] else { return }
+        guard message.status == .sending else { return }
         message = Message(
             serverMessageID: serverMessageID,
             clientMessageID: message.clientMessageID,

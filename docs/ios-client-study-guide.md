@@ -113,6 +113,7 @@ ChatMiddleware.sendTapped
 | HTTP `429` + Retry-After | ✅ | 退避抖动，保持 sending |
 | path 恢复续跑 | ✅（0046） | `SendPathResumeMonitor` → `reclaimStaleSendingAndProcess` |
 | sending 超时/孤儿 | ✅（0046） | 超时或无内存计时 → **queued**（允许 `sending→queued`） |
+| 用户取消发送 | ✅（0055） | `queued`/`sending` → **cancelled**（终态，不自动续跑）；与超时回 queued 区分 |
 | 自己发的消息不靠 sync 回环 | ✅ | — |
 | 展示排序 | ✅（0044） | 按 `conversation_seq`；无 seq 的 pending 置底 |
 

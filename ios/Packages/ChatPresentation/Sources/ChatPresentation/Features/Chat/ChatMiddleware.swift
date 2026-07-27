@@ -253,6 +253,10 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
+        case .cancelSendTapped(let clientMessageID):
+            store.runTask(id: CancellationID("chat.cancelSend.\(clientMessageID)")) {
+                await services.sendExecutor.cancelSend(clientMessageID: clientMessageID)
+            }
         case .syncTapped, .sceneBecameActive:
             guard store.state.isLoggedIn else { return }
             let activeConversationID = store.state.chat.activeConversationID

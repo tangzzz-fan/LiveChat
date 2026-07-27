@@ -95,6 +95,7 @@ extension LocalDatabase {
                   status = ?,
                   server_received_at = ?
                 WHERE client_message_id = ?
+                  AND status = ?
                 """,
                 arguments: [
                     serverMessageID,
@@ -102,6 +103,7 @@ extension LocalDatabase {
                     MessageStatus.accepted.rawValue,
                     serverReceivedAtMs,
                     clientMessageID,
+                    MessageStatus.sending.rawValue,
                 ]
             )
         }
@@ -333,13 +335,15 @@ extension LocalDatabase {
             SELECT * FROM messages
             WHERE conversation_id = ?
               AND conversation_seq IS NULL
-              AND status IN (?, ?)
+              AND status IN (?, ?, ?, ?)
             ORDER BY created_at ASC
             """,
             arguments: [
                 conversationID,
                 MessageStatus.queued.rawValue,
                 MessageStatus.sending.rawValue,
+                MessageStatus.failed.rawValue,
+                MessageStatus.cancelled.rawValue,
             ]
         )
     }

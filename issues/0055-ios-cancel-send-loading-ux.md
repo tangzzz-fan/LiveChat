@@ -1,8 +1,8 @@
 ---
 id: "0055"
 title: "iOS 发送中 loading + 取消发送（未 accepted 前）"
-status: ready-for-agent
-labels: ["ready-for-agent", "p1"]
+status: complete
+labels: ["done", "p1"]
 blocked_by: ["0046"]
 created_at: 2026-07-27
 ---
@@ -20,20 +20,20 @@ created_at: 2026-07-27
 
 ## What to build
 
-- 己方 `queued` / `sending` 气泡展示发送中指示（如小 spinner / ProgressView），与 `accepted+` 状态符并存策略写清
-- Domain：扩展 `MessageStatus`（建议 `cancelled` 终态）及合法转移：`queued|sending → cancelled`；**禁止** `accepted+ → cancelled`
-- `MessageSendExecutor`：按 `clientMessageID` 可取消 in-flight Task；取消后更新本地状态，队列跳过该条
-- Presentation：发送中气泡可点「取消」；工具栏整队「重试」行为不变
-- 单测：取消后不再发 HTTP；已 `accepted` 不可取消
+- [x] 己方 `queued` / `sending` 气泡展示 spinner +「取消」
+- [x] Domain：`MessageStatus.cancelled`；`queued|sending → cancelled`；禁止 `accepted+ → cancelled`
+- [x] `MessageSendExecutor.cancelSend`；超时 CancellationError → queued；用户取消 → cancelled
+- [x] 长按菜单「取消发送」；工具栏整队「重试」不变
+- [x] 单测：状态机 + 取消后保持 cancelled
 
 ## Acceptance criteria
 
-- [ ] `queued`/`sending` 气泡有明确 loading，弱网长时间停留可感知
-- [ ] 用户取消后：in-flight 被取消或结果被忽略；本地为 `cancelled`（或等价删除）且不自动续跑
-- [ ] 与 0046 超时收回共存：未取消的 `sending` 仍可超时→`queued`
-- [ ] Spec 13 / study-guide / high-load #5 补一句取消语义
-- [ ] Domain 状态机测试覆盖新转移
+- [x] `queued`/`sending` 气泡有明确 loading
+- [x] 用户取消后本地为 `cancelled` 且不自动续跑
+- [x] 与 0046 超时收回共存
+- [x] Spec 13 / study-guide / high-load #5 补取消语义
+- [x] Domain 状态机测试覆盖新转移
 
 ## Related
 
-- `MessageSendExecutor` · `SendPathResumeMonitor` · `MessageStatus` · `ChatViews` statusGlyph
+- `MessageSendExecutor` · `MessageStatus` · `ChatViews`

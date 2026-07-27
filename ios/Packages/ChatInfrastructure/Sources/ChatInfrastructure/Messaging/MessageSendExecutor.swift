@@ -131,7 +131,7 @@ public final class MessageAPI: Sendable {
     }
 }
 
-/// 有界发送队列：本地先落库，再 HTTP；429 按 Retry-After + jitter 退避；sending 超时回 queued。
+/// 有界发送队列：本地先落库，再 HTTP；429 按 Retry-After + jitter 退避；sending 超时回 queued；用户取消 → cancelled。
 public actor MessageSendExecutor {
     public static let maxQueueDepth = 100
     /// sending 卡住上限（弱网 / API 挂起）；超时回 queued，由 path 恢复或重试续跑。
@@ -142,6 +142,9 @@ public actor MessageSendExecutor {
     private let sendingTimeoutNanoseconds: UInt64
     private var isProcessing = false
     private var sendingStartedAt: [String: ContinuousClock.Instant] = [:]
+    /// 用户主动取消的 client_message_id（与超时 CancellationError 区分）。
+    private var userCancelledIDs: Set<String> = []
+    private var inFlightSendTasks: [String: Task<SendMessageResponse, Error>] = [:]
 
     public init(
         store: any MessageStore,
@@ -166,6 +169,15 @@ public actor MessageSendExecutor {
         await process()
     }
 
+    /// 用户取消：仅 `queued`/`sending` → `cancelled`；打断 in-flight；不自动续跑。
+    public func cancelSend(clientMessageID: String) async {
+        userCancelledIDs.insert(clientMessageID)
+        inFlightSendTasks[clientMessageID]?.cancel()
+        inFlightSendTasks[clientMessageID] = nil
+        sendingStartedAt.removeValue(forKey: clientMessageID)
+        try? store.updateMessageStatus(clientMessageID: clientMessageID, status: .cancelled)
+    }
+
     /// 路径恢复入口：先收回超时/孤儿 sending，再续跑（不与 429 退避叠成风暴——仍单 actor 串行）。
     public func reclaimStaleSendingAndProcess() async {
         _ = try? reclaimStaleSending(now: .now)
@@ -181,6 +193,7 @@ public actor MessageSendExecutor {
         let pending = try store.fetchPendingSend(limit: Self.maxQueueDepth)
         var count = 0
         for item in pending where item.status == .sending {
+            if userCancelledIDs.contains(item.clientMessageID) { continue }
             let stale: Bool
             if let started = sendingStartedAt[item.clientMessageID] {
                 stale = now - started >= Duration.seconds(30)
@@ -220,20 +233,50 @@ public actor MessageSendExecutor {
             }
             guard let item = batch.first else { return }
 
+            if userCancelledIDs.contains(item.clientMessageID) {
+                try? store.updateMessageStatus(
+                    clientMessageID: item.clientMessageID,
+                    status: .cancelled
+                )
+                userCancelledIDs.remove(item.clientMessageID)
+                continue
+            }
+
             do {
                 try store.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .sending
                 )
                 sendingStartedAt[item.clientMessageID] = .now
-                let response = try await sendWithTimeout(
-                    SendMessageRequest(
-                        clientMessageID: item.clientMessageID,
-                        conversationID: item.conversationID,
-                        messageType: item.messageType,
-                        content: item.content
-                    )
+                let request = SendMessageRequest(
+                    clientMessageID: item.clientMessageID,
+                    conversationID: item.conversationID,
+                    messageType: item.messageType,
+                    content: item.content
                 )
+                let sendTask = Task<SendMessageResponse, Error> {
+                    try await self.sendWithTimeout(request)
+                }
+                inFlightSendTasks[item.clientMessageID] = sendTask
+                let response: SendMessageResponse
+                do {
+                    response = try await sendTask.value
+                } catch {
+                    inFlightSendTasks[item.clientMessageID] = nil
+                    throw error
+                }
+                inFlightSendTasks[item.clientMessageID] = nil
+
+                if userCancelledIDs.contains(item.clientMessageID) {
+                    userCancelledIDs.remove(item.clientMessageID)
+                    sendingStartedAt.removeValue(forKey: item.clientMessageID)
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .cancelled
+                    )
+                    continue
+                }
+
                 try store.updateMessageAccepted(
                     clientMessageID: item.clientMessageID,
                     serverMessageID: response.serverMessageID,
@@ -242,21 +285,49 @@ public actor MessageSendExecutor {
                 )
                 sendingStartedAt.removeValue(forKey: item.clientMessageID)
             } catch let HTTPClientError.rateLimited(retryAfter, _) {
+                if userCancelledIDs.contains(item.clientMessageID) {
+                    userCancelledIDs.remove(item.clientMessageID)
+                    sendingStartedAt.removeValue(forKey: item.clientMessageID)
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .cancelled
+                    )
+                    continue
+                }
                 // Stay in sending; wait then retry same client_message_id（刷新计时）。
                 sendingStartedAt[item.clientMessageID] = .now
                 let jitter = Double.random(in: 0...(retryAfter * 0.2))
                 try? await Task.sleep(nanoseconds: UInt64((retryAfter + jitter) * 1_000_000_000))
             } catch is CancellationError {
-                try? store.updateMessageStatus(
-                    clientMessageID: item.clientMessageID,
-                    status: .queued
-                )
+                inFlightSendTasks[item.clientMessageID] = nil
+                if userCancelledIDs.contains(item.clientMessageID) {
+                    userCancelledIDs.remove(item.clientMessageID)
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .cancelled
+                    )
+                } else {
+                    // 超时 TaskGroup：回 queued 续跑（0046）
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .queued
+                    )
+                }
                 sendingStartedAt.removeValue(forKey: item.clientMessageID)
             } catch {
-                try? store.updateMessageStatus(
-                    clientMessageID: item.clientMessageID,
-                    status: .failed
-                )
+                inFlightSendTasks[item.clientMessageID] = nil
+                if userCancelledIDs.contains(item.clientMessageID) {
+                    userCancelledIDs.remove(item.clientMessageID)
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .cancelled
+                    )
+                } else {
+                    try? store.updateMessageStatus(
+                        clientMessageID: item.clientMessageID,
+                        status: .failed
+                    )
+                }
                 sendingStartedAt.removeValue(forKey: item.clientMessageID)
             }
         }

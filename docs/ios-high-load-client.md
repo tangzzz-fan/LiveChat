@@ -53,9 +53,9 @@
 
 **触发**：地铁、切网、丢包。
 
-**方案**：先写本地 `queued`；`NWPathMonitor`；恢复后续跑队列（Spec 13 §8.3）；`sending` 需超时 → `failed`/`queued`。
+**方案**：先写本地 `queued`；`NWPathMonitor`；恢复后续跑队列（Spec 13 §8.3）；`sending` 需超时 → `failed`/`queued`。用户主动取消（0055）→ `cancelled` 终态，**不**自动续跑。
 
-**坑点**：路径抖动反复重连；`sending` 卡死；乐观 UI 不收敛。
+**坑点**：路径抖动反复重连；`sending` 卡死；乐观 UI 不收敛；勿把用户取消与超时收回混成同一状态。
 
 ### 6. 客户端重连风暴
 
@@ -126,7 +126,7 @@ python run.py --scenario group_fanout --concurrency 30 --duration 30
 | # | 项 | 结论 | 依据 |
 |---|----|------|------|
 | 1 | 约 1k 历史首屏 | **通过（实现层）** / 真机 Instruments 建议人工复查 | 0044 窗分页 `pageSize=50`；0045 ValueObservation 16ms 去抖；不在首屏全量 decode |
-| 2 | 弱网发送 queued→恢复 | **通过** | 0046：`SendPathResumeMonitor` + sending 超时回 queued；`MessageSendExecutor.reclaimStaleSendingAndProcess` |
+| 2 | 弱网发送 queued→恢复 | **通过** | 0046：`SendPathResumeMonitor` + sending 超时回 queued；`MessageSendExecutor.reclaimStaleSendingAndProcess`；0055 用户取消 → cancelled |
 | 3 | 突发投递不掉帧级卡顿 | **通过（实现层）** | 0045 去抖投影；列表只绑可见窗 |
 | 4 | 重连不并发多条 WS | **通过** | 0041：`RealtimeListenGate` 单飞 + `RealtimeSession` 退避；UI 横幅可见重连次数 |
 

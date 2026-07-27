@@ -123,6 +123,7 @@ public enum ChatAction: Sendable {
     case copyMessageTapped(String)
     case deleteLocalMessageTapped(String)
     case retryMessageTapped(String)
+    case cancelSendTapped(String)
     case syncTapped
     case sceneBecameActive
     case sceneBecameBackground
@@ -153,6 +154,7 @@ public enum ChatFeature {
         case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .sendImageTapped,
              .loadOlderMessagesTapped, .retryQueuedTapped,
              .copyMessageTapped, .deleteLocalMessageTapped, .retryMessageTapped,
+             .cancelSendTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:

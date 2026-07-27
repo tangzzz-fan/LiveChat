@@ -56,7 +56,7 @@
 | [0052](0052-ios-fine-grained-ports-executor.md) | iOS 细粒度 Port：Store/Remote + Executor 依赖协议 | complete | `done`, `p1`, `blocked-by:0051` | 2026-07-27 |
 | [0053](0053-ios-appservices-port-injection-fakes.md) | iOS AppServices 协议注入 + Fake 可测主路径 | complete | `done`, `p1`, `blocked-by:0052` | 2026-07-27 |
 | [0054](0054-ios-read-receipt-unread.md) | iOS 已读回执：进会话清未读 + WS ACK(read) + 气泡状态 | complete | `done`, `p0`, `blocked-by:0041,0044` | 2026-07-27 |
-| [0055](0055-ios-cancel-send-loading-ux.md) | iOS 发送中 loading + 取消发送（未 accepted 前） | ready-for-agent | `ready-for-agent`, `p1`, `blocked-by:0046` | 2026-07-27 |
+| [0055](0055-ios-cancel-send-loading-ux.md) | iOS 发送中 loading + 取消发送（未 accepted 前） | complete | `done`, `p1`, `blocked-by:0046` | 2026-07-27 |
 | [0056](0056-ios-message-long-press-menu.md) | iOS 消息长按菜单：复制 / 本地删除 / 失败重试 | complete | `done`, `p1`, `blocked-by:0044` | 2026-07-27 |
 | [0057](0057-ios-message-multi-select.md) | iOS 消息多选模式：批量删除 / 转发入口 | ready-for-agent | `ready-for-agent`, `p1`, `blocked-by:0056` | 2026-07-27 |
 | [0058](0058-ios-message-forward-share.md) | iOS 消息转发 / 系统分享 | ready-for-agent | `ready-for-agent`, `p2`, `blocked-by:0056` | 2026-07-27 |
