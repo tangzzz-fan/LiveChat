@@ -386,6 +386,11 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 | 会话摘要与未读数 | ✓ | — |
 | 推送唤醒与去重 | ✓ | — |
 | 图片上传/下载/缩略图 | ✓ | — |
+| 发送中 loading + 取消发送（未 accepted 前） | — | ✓（0055） |
+| 消息长按菜单（复制 / 本地删除 / 失败重试） | — | ✓（0056） |
+| 消息多选（批量删除 / 转发入口） | — | ✓（0057） |
+| 转发 / 系统分享 | — | ✓（0058，可标 P2） |
+| 已发消息编辑 | — | 依赖服务端协议；先 spike（0059） |
 | Notification Service Extension 解密 | — | ✓ |
 | E2EE 密钥管理 | — | ✓ |
 | 视频转码/内容审核 | — | ✓ |
