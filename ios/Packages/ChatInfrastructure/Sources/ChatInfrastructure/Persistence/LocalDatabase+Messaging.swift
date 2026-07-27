@@ -116,14 +116,227 @@ extension LocalDatabase {
         }
     }
 
+    /// 按 Spec / 高负载 #10：同会话内以 `conversation_seq` 升序；无 seq 的 queued/sending 置底（`created_at` 次序）。
     public func fetchMessages(conversationID: String, limit: Int) throws -> [MessageRecord] {
+        try fetchMessageWindow(
+            conversationID: conversationID,
+            mode: .latestPage,
+            pageSize: limit
+        ).records
+    }
+
+    /// 最新一页 + pending；`hasMoreOlder` 表示库中是否还有更早的 seq 消息。
+    public func fetchLatestMessageWindow(
+        conversationID: String,
+        pageSize: Int = MessageWindow.defaultPageSize
+    ) throws -> MessageWindowPage {
+        try fetchMessageWindow(conversationID: conversationID, mode: .latestPage, pageSize: pageSize)
+    }
+
+    /// 向上翻页：`conversation_seq` 严格小于 `beforeSeq` 的最近一页（升序返回，便于 prepend）。
+    public func fetchOlderMessages(
+        conversationID: String,
+        beforeSeq: Int64,
+        pageSize: Int = MessageWindow.defaultPageSize
+    ) throws -> MessageWindowPage {
         try dbQueue.read { db in
-            try MessageRecord
-                .filter(Column("conversation_id") == conversationID)
-                .order(Column("created_at").asc)
-                .limit(limit)
-                .fetchAll(db)
+            let slice = try MessageRecord.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM messages
+                WHERE conversation_id = ?
+                  AND conversation_seq IS NOT NULL
+                  AND conversation_seq < ?
+                ORDER BY conversation_seq DESC
+                LIMIT ?
+                """,
+                arguments: [conversationID, beforeSeq, pageSize]
+            )
+            let ordered = slice.reversed()
+            let oldest = ordered.compactMap(\.conversationSeq).min()
+            let hasMore: Bool
+            if let oldest {
+                hasMore = try Bool.fetchOne(
+                    db,
+                    sql: """
+                    SELECT EXISTS(
+                      SELECT 1 FROM messages
+                      WHERE conversation_id = ?
+                        AND conversation_seq IS NOT NULL
+                        AND conversation_seq < ?
+                    )
+                    """,
+                    arguments: [conversationID, oldest]
+                ) ?? false
+            } else {
+                hasMore = false
+            }
+            return MessageWindowPage(records: Array(ordered), hasMoreOlder: hasMore, oldestSeq: oldest)
         }
+    }
+
+    public func fetchMessageWindow(
+        conversationID: String,
+        mode: MessageWindowLoadMode,
+        pageSize: Int = MessageWindow.defaultPageSize
+    ) throws -> MessageWindowPage {
+        try dbQueue.read { db in
+            try Self.messageWindow(
+                db: db,
+                conversationID: conversationID,
+                mode: mode,
+                pageSize: pageSize
+            )
+        }
+    }
+
+    /// 供 ValueObservation 在同一 `Database` 上读取消息窗（避免嵌套 `dbQueue.read`）。
+    public static func messageWindow(
+        db: Database,
+        conversationID: String,
+        mode: MessageWindowLoadMode,
+        pageSize: Int = MessageWindow.defaultPageSize
+    ) throws -> MessageWindowPage {
+        let pending = try fetchPendingInConversation(db: db, conversationID: conversationID)
+        let seqRows: [MessageRecord]
+        let hasMoreOlder: Bool
+        let oldestSeq: Int64?
+
+        switch mode {
+        case .latestPage:
+            let slice = try MessageRecord.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM messages
+                WHERE conversation_id = ?
+                  AND conversation_seq IS NOT NULL
+                ORDER BY conversation_seq DESC
+                LIMIT ?
+                """,
+                arguments: [conversationID, pageSize]
+            )
+            seqRows = Array(slice.reversed())
+            oldestSeq = seqRows.compactMap(\.conversationSeq).min()
+            if let oldestSeq {
+                hasMoreOlder = try Bool.fetchOne(
+                    db,
+                    sql: """
+                    SELECT EXISTS(
+                      SELECT 1 FROM messages
+                      WHERE conversation_id = ?
+                        AND conversation_seq IS NOT NULL
+                        AND conversation_seq < ?
+                    )
+                    """,
+                    arguments: [conversationID, oldestSeq]
+                ) ?? false
+            } else {
+                hasMoreOlder = false
+            }
+        case .fromSeq(let anchor):
+            seqRows = try MessageRecord.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM messages
+                WHERE conversation_id = ?
+                  AND conversation_seq IS NOT NULL
+                  AND conversation_seq >= ?
+                ORDER BY conversation_seq ASC
+                """,
+                arguments: [conversationID, anchor]
+            )
+            oldestSeq = anchor
+            hasMoreOlder = try Bool.fetchOne(
+                db,
+                sql: """
+                SELECT EXISTS(
+                  SELECT 1 FROM messages
+                  WHERE conversation_id = ?
+                    AND conversation_seq IS NOT NULL
+                    AND conversation_seq < ?
+                )
+                """,
+                arguments: [conversationID, anchor]
+            ) ?? false
+        }
+
+        return MessageWindowPage(
+            records: mergeDisplayOrder(seqRows: seqRows, pending: pending),
+            hasMoreOlder: hasMoreOlder,
+            oldestSeq: oldestSeq
+        )
+    }
+
+    public static func conversationSummaries(db: Database, userID: Int64) throws -> [ConversationSummaryRecord] {
+        try ConversationSummaryRecord
+            .filter(Column("user_id") == userID)
+            .order(Column("updated_at").desc)
+            .fetchAll(db)
+    }
+
+    /// 本地已落库的最大 conversation_seq（无消息为 0）。
+    public func maxConversationSeq(conversationID: String) throws -> Int64 {
+        try dbQueue.read { db in
+            try Int64.fetchOne(
+                db,
+                sql: """
+                SELECT COALESCE(MAX(conversation_seq), 0) FROM messages
+                WHERE conversation_id = ? AND conversation_seq IS NOT NULL
+                """,
+                arguments: [conversationID]
+            ) ?? 0
+        }
+    }
+
+    /// 相邻 seq 缺口起点列表（如本地有 1,2,5 → 返回 3）。
+    public func conversationSeqGapStarts(conversationID: String) throws -> [Int64] {
+        try dbQueue.read { db in
+            let seqs = try Int64.fetchAll(
+                db,
+                sql: """
+                SELECT conversation_seq FROM messages
+                WHERE conversation_id = ? AND conversation_seq IS NOT NULL
+                ORDER BY conversation_seq ASC
+                """,
+                arguments: [conversationID]
+            )
+            guard let first = seqs.first else { return [] }
+            var gaps: [Int64] = []
+            if first > 1 {
+                gaps.append(1)
+            }
+            for i in 1..<seqs.count {
+                let prev = seqs[i - 1]
+                let next = seqs[i]
+                if next > prev + 1 {
+                    gaps.append(prev + 1)
+                }
+            }
+            return gaps
+        }
+    }
+
+    private static func fetchPendingInConversation(db: Database, conversationID: String) throws -> [MessageRecord] {
+        try MessageRecord.fetchAll(
+            db,
+            sql: """
+            SELECT * FROM messages
+            WHERE conversation_id = ?
+              AND conversation_seq IS NULL
+              AND status IN (?, ?)
+            ORDER BY created_at ASC
+            """,
+            arguments: [
+                conversationID,
+                MessageStatus.queued.rawValue,
+                MessageStatus.sending.rawValue,
+            ]
+        )
+    }
+
+    /// 已排序的 seq 消息 + pending 置底。
+    private static func mergeDisplayOrder(seqRows: [MessageRecord], pending: [MessageRecord]) -> [MessageRecord] {
+        seqRows + pending
     }
 
     public func fetchPendingSend(limit: Int) throws -> [MessageRecord] {

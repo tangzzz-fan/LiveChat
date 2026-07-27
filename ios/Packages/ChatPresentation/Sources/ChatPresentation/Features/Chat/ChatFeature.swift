@@ -7,6 +7,9 @@ public struct ChatState: Equatable, Sendable {
     public var conversationRows: [ConversationRow]
     public var activeConversationID: String?
     public var visibleMessages: [MessageRow]
+    /// 当前窗口内已加载的最小 `conversation_seq`（无 seq 的 pending 不计）。
+    public var oldestLoadedSeq: Int64?
+    public var hasMoreOlder: Bool
     public var composeDraft: String
     public var isBusy: Bool
     public var errorMessage: String?
@@ -36,6 +39,8 @@ public struct ChatState: Equatable, Sendable {
         conversationRows: [ConversationRow] = [],
         activeConversationID: String? = nil,
         visibleMessages: [MessageRow] = [],
+        oldestLoadedSeq: Int64? = nil,
+        hasMoreOlder: Bool = false,
         composeDraft: String = "",
         isBusy: Bool = false,
         errorMessage: String? = nil,
@@ -48,6 +53,8 @@ public struct ChatState: Equatable, Sendable {
         self.conversationRows = conversationRows
         self.activeConversationID = activeConversationID
         self.visibleMessages = visibleMessages
+        self.oldestLoadedSeq = oldestLoadedSeq
+        self.hasMoreOlder = hasMoreOlder
         self.composeDraft = composeDraft
         self.isBusy = isBusy
         self.errorMessage = errorMessage
@@ -66,6 +73,7 @@ public enum ChatAction: Sendable {
     case leaveConversation
     case updateDraft(String)
     case sendTapped
+    case loadOlderMessagesTapped
     case retryQueuedTapped
     case syncTapped
     case sceneBecameActive
@@ -80,8 +88,9 @@ public enum ChatAction: Sendable {
     case busy(Bool)
     case failed(String)
     case conversationsLoaded([ChatState.ConversationRow])
-    case conversationOpened(id: String, messages: [ChatState.MessageRow])
-    case visibleMessagesUpdated([ChatState.MessageRow])
+    case conversationOpened(id: String, messages: [ChatState.MessageRow], oldestLoadedSeq: Int64?, hasMoreOlder: Bool)
+    case visibleMessagesUpdated([ChatState.MessageRow], oldestLoadedSeq: Int64?, hasMoreOlder: Bool)
+    case olderMessagesPrepended([ChatState.MessageRow], oldestLoadedSeq: Int64?, hasMoreOlder: Bool)
     case setConnectionBanner(String?)
     case setPushTokenBanner(String?)
     case syncStarted
@@ -93,7 +102,7 @@ public enum ChatAction: Sendable {
 public enum ChatFeature {
     public static let reducer: Reducer<ChatState, ChatAction> = { state, action in
         switch action {
-        case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .retryQueuedTapped,
+        case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .loadOlderMessagesTapped, .retryQueuedTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:
@@ -107,6 +116,8 @@ public enum ChatFeature {
         case .leaveConversation:
             state.activeConversationID = nil
             state.visibleMessages = []
+            state.oldestLoadedSeq = nil
+            state.hasMoreOlder = false
             state.composeDraft = ""
         case .updateDraft(let text):
             state.composeDraft = text
@@ -119,13 +130,22 @@ public enum ChatFeature {
         case .conversationsLoaded(let rows):
             state.conversationRows = rows
             state.isBusy = false
-        case .conversationOpened(let id, let messages):
+        case .conversationOpened(let id, let messages, let oldest, let hasMore):
             state.activeConversationID = id
             state.visibleMessages = messages
+            state.oldestLoadedSeq = oldest
+            state.hasMoreOlder = hasMore
             state.isBusy = false
             state.errorMessage = nil
-        case .visibleMessagesUpdated(let messages):
+        case .visibleMessagesUpdated(let messages, let oldest, let hasMore):
             state.visibleMessages = messages
+            state.oldestLoadedSeq = oldest
+            state.hasMoreOlder = hasMore
+            state.isBusy = false
+        case .olderMessagesPrepended(let older, let oldest, let hasMore):
+            state.visibleMessages = older + state.visibleMessages
+            state.oldestLoadedSeq = oldest
+            state.hasMoreOlder = hasMore
             state.isBusy = false
         case .setConnectionBanner(let banner):
             state.connectionBanner = banner

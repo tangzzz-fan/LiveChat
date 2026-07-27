@@ -122,6 +122,15 @@ public struct ChatThreadView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            if store.state.chat.hasMoreOlder {
+                Button("加载更早消息") {
+                    store.dispatch(.chat(.loadOlderMessagesTapped))
+                }
+                .font(.subheadline)
+                .padding(.vertical, 8)
+                .disabled(store.state.chat.isBusy)
+            }
+
             List(store.state.chat.visibleMessages) { message in
                 HStack {
                     if message.isMine { Spacer(minLength: 40) }
