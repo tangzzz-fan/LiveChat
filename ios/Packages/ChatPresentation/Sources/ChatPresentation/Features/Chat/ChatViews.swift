@@ -256,9 +256,17 @@ public struct ChatThreadView: View {
                         } else {
                             Text(message.text)
                         }
-                        Text(message.serverMessageID ?? message.status)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            if message.isMine {
+                                Text(statusGlyph(for: message.status))
+                                    .font(.caption2)
+                                    .foregroundStyle(message.status == "read" ? Color.accentColor : Color.secondary)
+                            }
+                            Text(message.serverMessageID ?? message.status)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
                     .padding(8)
                     .background(message.isMine ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
@@ -311,6 +319,17 @@ public struct ChatThreadView: View {
         store.state.chat.conversationRows
             .first(where: { $0.conversationID == conversationID })?
             .title ?? conversationID
+    }
+
+    private func statusGlyph(for status: String) -> String {
+        switch status {
+        case "queued", "sending": return "○"
+        case "accepted": return "✓"
+        case "delivered": return "✓✓"
+        case "read": return "✓✓"
+        case "failed": return "!"
+        default: return status
+        }
     }
 
     #if canImport(PhotosUI)

@@ -83,8 +83,9 @@ cd ../ChatPresentation && swift test
 | 已有 | 未有 |
 |------|------|
 | 0038–0042 主链路 | 生产 APNs 证书 / 真推送联调 |
-| 会话列表 UI（标题/预览/时间/未读） | 已读回执精细 UI |
+| 会话列表 UI（标题/预览/时间/未读） | 生产 APNs 证书 / 真推送联调 |
 | 图片消息（0049：选图→上传→气泡缩略） | 视频 / 原图浏览 |
+| 已读回执（0054：进会话清未读 + ACK(read) + ✓✓） | delivered 独立 ACK（服务端暂未接） |
 | mock push token + 本地静默注入 | — |
 | 前台 WS + 后台 sync + 缺口补拉 | — |
 
@@ -102,6 +103,9 @@ cd ../ChatPresentation && swift test
 
 ---
 
-## 7. 横切验收（0050）
+## 8. 已读回执联调（0054）
 
-结论与步骤见 [ios-high-load-client.md](./ios-high-load-client.md)「建议的横切验收项」。
+1. A 发消息给 B（B 不在该会话）→ B 列表未读应累加  
+2. B 点进会话 → 未读角标清零；若 WS 已连接会发 `ACK(read)`  
+3. A 侧手动同步或等 sync → 己方气泡应变为已读标记（✓✓ 高亮）  
+4. 服务端需 gateway + outbox-consumer 消费 `read_receipt`

@@ -14,7 +14,8 @@ public enum MessageStatus: String, CaseIterable, Codable, Sendable {
         case .queued: return [.sending]
         // queued：sending 超时 / 进程重启后收回，避免永久卡死（高负载 #5）
         case .sending: return [.accepted, .failed, .queued]
-        case .accepted: return [.delivered]
+        // 已读回执可从 accepted 直接收敛到 read（跳过 delivered）
+        case .accepted: return [.delivered, .read]
         case .delivered: return [.read]
         case .read: return []
         case .failed: return [.queued]

@@ -35,10 +35,12 @@
 | 0046 | 弱网 path 续跑 + sending 超时 | 高负载 #5、Spec 13 §8.3 | 本文 §5；`SendPathResumeMonitor` |
 | 0047 | 会话 seq 缺口补拉 | [05](./engineering-problems/05-offline-gap-detection.md)、Spec 06 §4.4 | 本文 §5；`ConversationGapBackfill`；服务端 `latest_seq` |
 | 0048 | 静默唤醒预算 | Spec 13 §8.2、高负载 #7 | 本文 §5；`SilentWakeOutcome` |
-| 0049 | 图片（开放） | 高负载 #9、工程问题 13 | 未做 |
-| 0050 | 横切验收（开放） | 高负载「建议的横切验收项」 | 未做 |
+| 0049 | 图片消息 | 高负载 #9、工程问题 13 | **complete**：MediaAPI + 缩略气泡 |
+| 0050 | 横切验收 | 高负载「建议的横切验收项」 | **complete**：见 ios-high-load-client |
+| 0051–0053 | Domain Port | 工程问题 19 | **resolved** |
+| 0054 | 已读 / 未读 | Spec 05 ACK、§5.1 | 进行中 |
 
-过时注意：[`iOS多端接入评估与实现.md`](./iOS多端接入评估与实现.md) 仍写「iOS 未接 WS」，以 **0038–0048 实现 + 本文** 为准。
+过时注意：[`iOS多端接入评估与实现.md`](./iOS多端接入评估与实现.md) 仍写「iOS 未接 WS」，以 **0038–0054 实现 + 本文** 为准。
 
 ---
 
@@ -101,9 +103,9 @@
 | 突发投递打爆 UI | ✅（0045） | 批量落库 + ValueObservation ~16ms 去抖 |
 | sync cursor 只前进 | ✅ | 单事件 apply 成功后才推进 |
 | 会话 seq 缺口检测 | ✅（0047） | `ConversationGapBackfill` + `latest_seq`；**不**推进 sync cursor |
-| 投递 ACK（客户端 → 网关） | ❌ | opcode `0x0005` 未发 |
-| 已读回执 UI | ❌ | — |
-| `MESSAGE_STATUS` / `CONV_UPDATE` | ❌ | handler 忽略 |
+| 投递 ACK（客户端 → 网关） | ⚠️（0054：`ACK(read)`；delivered 服务端暂未接） | opcode `0x0005` |
+| 已读回执 UI | ✅（0054） | 进会话清未读 + 气泡状态 + sync `message_read` |
+| `MESSAGE_STATUS` / `CONV_UPDATE` | ⚠️ | sync 处理 `message_read` / `conversation_updated`；WS 帧仍忽略 |
 | Token 过期中途断连 | ⚠️ | 握手失败不重连；无静默 refresh |
 
 ### 4.4 连接生命周期
@@ -163,7 +165,7 @@
 | `MessageStore` / `MessageRemote` | ✅ | `LocalDatabase` / `MessageAPI` → `MessageSendExecutor` |
 | `SyncCursorStore` / `SyncRemote` | ✅ | `LocalDatabase` / `SyncAPI` → `SyncExecutor` |
 | `ConversationStore` / `ConversationRemote` | ✅ | `LocalDatabase` / `ConversationAPI` |
-| `MediaRepository` | ❌ 未做 | 留给 [0049](../issues/0049-ios-image-message.md) |
+| `MediaRepository` | ✅ | `MediaAPI`（0049） |
 
 **禁止**空壳 `MessageRepositoryLive`。粗协议已删除。
 

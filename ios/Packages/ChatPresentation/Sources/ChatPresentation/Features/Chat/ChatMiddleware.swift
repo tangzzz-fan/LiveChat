@@ -371,6 +371,8 @@ private func openConversation(
         myUserID: myUserID,
         mode: .latestPage
     )
+    // 0054：进会话清未读 + WS ACK(read)
+    await services.realtime.markConversationRead(conversationID: conversationID, userID: myUserID)
     _ = try? await services.gapBackfill.backfillIfNeeded(conversationID: conversationID)
 }
 
@@ -420,6 +422,11 @@ private func bindMessageObservation(
                 oldestLoadedSeq: oldest,
                 hasMoreOlder: hasMore
             )))
+            // 正在看这个会话时，持续清未读并推进已读水位（对方新消息到达）。
+            await services.realtime.markConversationRead(
+                conversationID: conversationID,
+                userID: myUserID
+            )
         }
     }
 }

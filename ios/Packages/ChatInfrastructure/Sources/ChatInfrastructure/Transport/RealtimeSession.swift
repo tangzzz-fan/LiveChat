@@ -42,6 +42,8 @@ public actor RealtimeSession {
     private var heartbeatInterval: TimeInterval = 30
     private var shouldReconnectOnClose = true
     private var handshakeWaiter: CheckedContinuation<Livechat_Ws_HandshakeResponse, Error>?
+    /// 已成功发出的 read ACK 水位，避免 observation 抖动重复上报。
+    private var lastReadAckByConversation: [String: Int64] = [:]
 
     public init(
         gatewayURL: URL,
@@ -77,6 +79,43 @@ public actor RealtimeSession {
         pathMonitor?.cancel()
         pathMonitor = nil
         eventContinuation.yield(.status(.disconnected(reason: reason)))
+    }
+
+    /// 打开会话 / 可见窗刷新时：发 ACK(read)。未连接或 seq=0 / 水位未变时静默跳过。
+    public func sendReadAck(conversationID: String, lastReadSeq: Int64) async {
+        guard lastReadSeq > 0, let transport else { return }
+        if lastReadAckByConversation[conversationID] == lastReadSeq { return }
+        do {
+            seq += 1
+            var ack = Livechat_Ws_MessageAck()
+            ack.ackType = "read"
+            ack.conversationID = conversationID
+            ack.lastReadSeq = UInt64(lastReadSeq)
+            ack.eventSeq = UInt64(lastReadSeq)
+            ack.ackedAtMs = UInt64(Date().timeIntervalSince1970 * 1000)
+            try await transport.send(
+                try WsCodec.encodeFrame(
+                    opcode: WsOpcode.ack,
+                    payload: ack,
+                    seqID: seq
+                )
+            )
+            lastReadAckByConversation[conversationID] = lastReadSeq
+        } catch {
+            // 已读可依赖下次打开 / sync 再发；勿打断读循环
+        }
+    }
+
+    /// 本地清未读（仅当未读>0）+（有 seq 时）发 read ACK。
+    public func markConversationRead(conversationID: String, userID: Int64) async {
+        let lastSeq = (try? database.maxConversationSeq(conversationID: conversationID)) ?? 0
+        let unread = (try? database.fetchConversationSummaryRecords(userID: userID)
+            .first(where: { $0.conversationID == conversationID })?
+            .unreadCount) ?? 0
+        if unread > 0 {
+            try? database.clearUnread(userID: userID, conversationID: conversationID)
+        }
+        await sendReadAck(conversationID: conversationID, lastReadSeq: lastSeq)
     }
 
     private func scheduleConnect(immediate: Bool) {

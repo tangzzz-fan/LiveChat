@@ -92,6 +92,25 @@ public final class FakeMessageStore: MessageStore, @unchecked Sendable {
         byClientID[message.clientMessageID] = message
     }
 
+    public func markOwnMessagesRead(conversationID: String, upToSeq: Int64, myUserID: Int64) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        for (id, message) in byClientID {
+            guard message.conversationID == conversationID,
+                  message.senderUserID == myUserID,
+                  let seq = message.conversationSeq,
+                  seq <= upToSeq,
+                  message.status == .accepted || message.status == .delivered
+            else { continue }
+            var updated = message
+            updated.status = .read
+            byClientID[id] = updated
+            if let sid = updated.serverMessageID {
+                byServerID[sid] = updated
+            }
+        }
+    }
+
     public func message(clientMessageID: String) -> Message? {
         lock.lock()
         defer { lock.unlock() }
@@ -193,5 +212,23 @@ public final class FakeConversationStore: ConversationStore, @unchecked Sendable
         lock.lock()
         defer { lock.unlock() }
         return summaries.values.filter { $0.userID == userID }
+    }
+
+    public func clearUnread(userID: Int64, conversationID: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var summary = summaries[conversationID], summary.userID == userID else { return }
+        summary = ConversationSummary(
+            userID: summary.userID,
+            conversationID: summary.conversationID,
+            type: summary.type,
+            title: summary.title,
+            lastMessagePreview: summary.lastMessagePreview,
+            lastMessageAt: summary.lastMessageAt,
+            unreadCount: 0,
+            isPinned: summary.isPinned,
+            isMuted: summary.isMuted
+        )
+        summaries[conversationID] = summary
     }
 }

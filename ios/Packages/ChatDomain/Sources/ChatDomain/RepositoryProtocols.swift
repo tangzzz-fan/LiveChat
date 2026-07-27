@@ -35,6 +35,8 @@ public protocol MessageStore: Sendable {
         content: String,
         serverReceivedAtMs: Int64?
     ) throws
+    /// 己方消息：`conversation_seq <= upToSeq` 推进为 read（MAX 收敛）。
+    func markOwnMessagesRead(conversationID: String, upToSeq: Int64, myUserID: Int64) throws
 }
 
 public protocol MessageRemote: Sendable {
@@ -53,6 +55,7 @@ public protocol SyncRemote: Sendable {
 public protocol ConversationStore: Sendable {
     func upsertConversationSummary(_ summary: ConversationSummary) throws
     func fetchConversationSummaries(userID: Int64) throws -> [ConversationSummary]
+    func clearUnread(userID: Int64, conversationID: String) throws
 }
 
 public struct DirectConversationResult: Sendable, Equatable {

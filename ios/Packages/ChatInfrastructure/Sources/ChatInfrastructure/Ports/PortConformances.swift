@@ -29,6 +29,29 @@ extension LocalDatabase: MessageStore {
             )
         )
     }
+
+    public func markOwnMessagesRead(conversationID: String, upToSeq: Int64, myUserID: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                UPDATE messages SET status = ?
+                WHERE conversation_id = ?
+                  AND sender_user_id = ?
+                  AND conversation_seq IS NOT NULL
+                  AND conversation_seq <= ?
+                  AND status IN (?, ?)
+                """,
+                arguments: [
+                    MessageStatus.read.rawValue,
+                    conversationID,
+                    myUserID,
+                    upToSeq,
+                    MessageStatus.accepted.rawValue,
+                    MessageStatus.delivered.rawValue,
+                ]
+            )
+        }
+    }
 }
 
 extension LocalDatabase: SyncCursorStore {}
@@ -36,6 +59,23 @@ extension LocalDatabase: SyncCursorStore {}
 extension LocalDatabase: ConversationStore {
     public func fetchConversationSummaries(userID: Int64) throws -> [ConversationSummary] {
         try fetchConversationSummaryRecords(userID: userID).map { $0.toDomain() }
+    }
+
+    public func clearUnread(userID: Int64, conversationID: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                UPDATE conversation_summaries
+                SET unread_count = 0, updated_at = ?
+                WHERE user_id = ? AND conversation_id = ?
+                """,
+                arguments: [
+                    Int64(Date().timeIntervalSince1970 * 1000),
+                    userID,
+                    conversationID,
+                ]
+            )
+        }
     }
 }
 

@@ -151,6 +151,34 @@ public actor SyncExecutor {
                 conversations: conversationStore
             )
             return payload.conversationID
+        case "message_read":
+            guard let data = event.payload.data(using: .utf8) else { return event.conversationID }
+            struct Payload: Decodable {
+                let conversation_id: String
+                let last_read_seq: Int64
+            }
+            let payload = try JSONDecoder().decode(Payload.self, from: data)
+            try IncomingMessageApplier.applyMessageRead(
+                conversationID: payload.conversation_id,
+                lastReadSeq: payload.last_read_seq,
+                myUserID: myUserID,
+                messages: messageStore
+            )
+            return payload.conversation_id
+        case "conversation_updated":
+            guard let data = event.payload.data(using: .utf8) else { return event.conversationID }
+            struct Payload: Decodable {
+                let conversation_id: String
+                let unread_count: Int?
+            }
+            let payload = try JSONDecoder().decode(Payload.self, from: data)
+            try IncomingMessageApplier.applyConversationUpdated(
+                conversationID: payload.conversation_id,
+                unreadCount: payload.unread_count,
+                myUserID: myUserID,
+                conversations: conversationStore
+            )
+            return payload.conversation_id
         default:
             // 未知类型跳过但仍推进游标，避免卡死；后续票可扩展。
             return event.conversationID

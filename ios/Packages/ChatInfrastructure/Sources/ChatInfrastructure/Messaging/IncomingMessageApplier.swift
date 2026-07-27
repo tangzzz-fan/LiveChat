@@ -22,15 +22,25 @@ public enum IncomingMessageApplier {
         let at: Date? = payload.serverReceivedAtMs.map {
             Date(timeIntervalSince1970: Double($0) / 1000)
         }
+        let existing = try conversations.fetchConversationSummaries(userID: myUserID)
+            .first(where: { $0.conversationID == payload.conversationID })
+        let unread: Int
+        if payload.senderUserID == myUserID {
+            unread = existing?.unreadCount ?? 0
+        } else {
+            unread = (existing?.unreadCount ?? 0) + 1
+        }
         try conversations.upsertConversationSummary(
             ConversationSummary(
                 userID: myUserID,
                 conversationID: payload.conversationID,
-                type: "direct",
-                title: "user \(payload.senderUserID)",
+                type: existing?.type ?? "direct",
+                title: existing?.title ?? "user \(payload.senderUserID)",
                 lastMessagePreview: preview,
-                lastMessageAt: at,
-                unreadCount: payload.senderUserID == myUserID ? 0 : 1
+                lastMessageAt: at ?? existing?.lastMessageAt,
+                unreadCount: unread,
+                isPinned: existing?.isPinned ?? false,
+                isMuted: existing?.isMuted ?? false
             )
         )
     }
@@ -59,11 +69,59 @@ public enum IncomingMessageApplier {
         )
     }
 
+    public static func applyMessageRead(
+        conversationID: String,
+        lastReadSeq: Int64,
+        myUserID: Int64,
+        messages: any MessageStore
+    ) throws {
+        guard lastReadSeq > 0 else { return }
+        try messages.markOwnMessagesRead(
+            conversationID: conversationID,
+            upToSeq: lastReadSeq,
+            myUserID: myUserID
+        )
+    }
+
+    public static func applyConversationUpdated(
+        conversationID: String,
+        unreadCount: Int?,
+        myUserID: Int64,
+        conversations: any ConversationStore
+    ) throws {
+        if unreadCount == 0 {
+            try conversations.clearUnread(userID: myUserID, conversationID: conversationID)
+            return
+        }
+        guard let unreadCount else { return }
+        let existing = try conversations.fetchConversationSummaries(userID: myUserID)
+            .first(where: { $0.conversationID == conversationID })
+        guard let existing else { return }
+        try conversations.upsertConversationSummary(
+            ConversationSummary(
+                userID: existing.userID,
+                conversationID: existing.conversationID,
+                type: existing.type,
+                title: existing.title,
+                lastMessagePreview: existing.lastMessagePreview,
+                lastMessageAt: existing.lastMessageAt,
+                unreadCount: unreadCount,
+                isPinned: existing.isPinned,
+                isMuted: existing.isMuted
+            )
+        )
+    }
+
     private static func previewText(from content: String) -> String {
         guard let data = content.data(using: .utf8) else { return content }
-        struct Payload: Decodable { let text: String? }
-        if let payload = try? JSONDecoder().decode(Payload.self, from: data), let text = payload.text {
-            return text
+        struct Payload: Decodable {
+            let text: String?
+            let attachment: Att?
+            struct Att: Decodable { let object_key: String? }
+        }
+        if let payload = try? JSONDecoder().decode(Payload.self, from: data) {
+            if let text = payload.text { return text }
+            if payload.attachment?.object_key != nil { return "[图片]" }
         }
         return content
     }

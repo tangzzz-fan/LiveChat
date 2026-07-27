@@ -55,3 +55,4 @@
 | [0051](0051-ios-domain-port-drift-docs.md) | iOS Domain 端口漂移：Spec/文档对齐（粗 Repository 降级） | complete | `done`, `p1` | 2026-07-27 |
 | [0052](0052-ios-fine-grained-ports-executor.md) | iOS 细粒度 Port：Store/Remote + Executor 依赖协议 | complete | `done`, `p1`, `blocked-by:0051` | 2026-07-27 |
 | [0053](0053-ios-appservices-port-injection-fakes.md) | iOS AppServices 协议注入 + Fake 可测主路径 | complete | `done`, `p1`, `blocked-by:0052` | 2026-07-27 |
+| [0054](0054-ios-read-receipt-unread.md) | iOS 已读回执：进会话清未读 + WS ACK(read) + 气泡状态 | complete | `done`, `p0`, `blocked-by:0041,0044` | 2026-07-27 |
