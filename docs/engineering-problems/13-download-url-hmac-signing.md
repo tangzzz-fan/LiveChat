@@ -87,6 +87,7 @@ if time.Now().Unix() > expiresAt {
 1. **签名密钥必须从 config 读取，不能硬编码**：`media.download_sign_secret` 在 `configs/message-service.yaml` 中配置。生产环境必须更换默认值。
 2. **expires_at 用 unix 秒，不是毫秒**：HMAC 签名对输入敏感，`exp=1752681600` 和 `exp=1752681600000` 是不同的签名。
 3. **不要对签名参数做 URL 编码**：签名是 hex 字符串（`[0-9a-f]`），天然 URL-safe。URL 编码只会让校验复杂化。
+4. **object_key 的路径编码必须可逆，不能用 `/`↔`_` 替换**（[0060](../../issues/0060-fix-media-download-url-encode.md)）：真实 key 常含 `_`（如 `img_1785…_photo.jpg`）。签名用原始 key，ServeDownload 用「解码后」key 校验；解码漂移 → `invalid signature` → 接收方永远加载失败，而发送方因上传时写入本地缓存看起来正常。正确做法：对整个 key 做 `base64.RawURLEncoding`（单路径段、无歧义）。
 
 ### 代码位置
 

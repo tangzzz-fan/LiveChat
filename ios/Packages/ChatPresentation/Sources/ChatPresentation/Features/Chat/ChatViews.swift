@@ -3,6 +3,9 @@ import TGReduxKit
 import ChatApplication
 import ChatDomain
 import ImageIO
+#if canImport(UIKit)
+import UIKit
+#endif
 #if canImport(PhotosUI)
 import PhotosUI
 #endif
@@ -228,6 +231,10 @@ public struct ChatThreadView: View {
     @Environment(Store<AppState, AppAction>.self) private var store
     @Environment(\.mediaRepository) private var media
     let conversationID: String
+    @FocusState private var isComposerFocused: Bool
+    @State private var scrollToLatestTask: Task<Void, Never>?
+    /// 加载更早后，把视口钉回加载前的首条，避免跳到最新。
+    @State private var restoreScrollMessageID: String?
     #if canImport(PhotosUI)
     @State private var pickerItem: PhotosPickerItem?
     #endif
@@ -236,6 +243,7 @@ public struct ChatThreadView: View {
         VStack(spacing: 0) {
             if store.state.chat.hasMoreOlder {
                 Button("加载更早消息") {
+                    restoreScrollMessageID = store.state.chat.visibleMessages.first?.id
                     store.dispatch(.chat(.loadOlderMessagesTapped))
                 }
                 .font(.subheadline)
@@ -252,7 +260,9 @@ public struct ChatThreadView: View {
                                 MessageImageBubble(
                                     objectKey: objectKey,
                                     conversationID: conversationID,
-                                    media: media
+                                    media: media,
+                                    pixelWidth: message.imageWidth,
+                                    pixelHeight: message.imageHeight
                                 )
                             } else {
                                 Text(message.text)
@@ -272,53 +282,73 @@ public struct ChatThreadView: View {
                         .padding(8)
                         .background(message.isMine ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .contextMenu {
+                            if !message.isImage {
+                                Button("复制") {
+                                    store.dispatch(.chat(.copyMessageTapped(message.text)))
+                                }
+                            }
+                            Button("删除", role: .destructive) {
+                                store.dispatch(.chat(.deleteLocalMessageTapped(message.clientMessageID)))
+                            }
+                            if message.isMine, message.status == "failed" {
+                                Button("重试") {
+                                    store.dispatch(.chat(.retryMessageTapped(message.clientMessageID)))
+                                }
+                            }
+                        }
                         if !message.isMine { Spacer(minLength: 40) }
                     }
                     .listRowSeparator(.hidden)
                     .id(message.id)
-                }
-                .listStyle(.plain)
-                .onAppear {
-                    scrollToLatest(proxy: proxy, animated: false)
-                }
-                // 仅当「列表尾部消息 id」变化时滚动（发送/接收）；加载更早不会改 last.id。
-                .onChange(of: store.state.chat.visibleMessages.last?.id) { _, _ in
-                    scrollToLatest(proxy: proxy, animated: true)
-                }
-            }
-
-            HStack(spacing: 10) {
-                #if canImport(PhotosUI)
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Image(systemName: "photo")
-                }
-                .disabled(store.state.chat.isBusy)
-                .onChange(of: pickerItem) { _, item in
-                    guard let item else { return }
-                    Task {
-                        await sendPickedImage(item)
-                        pickerItem = nil
+                    .onTapGesture {
+                        dismissComposerIfNeeded()
                     }
                 }
-                #endif
-                TextField(
-                    "输入消息",
-                    text: store.binding(
-                        get: { $0.chat.composeDraft },
-                        send: { .chat(.updateDraft($0)) }
-                    )
+                .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
+                // iOS 17+：优先从底部锚定，减轻进会话先停在顶部的闪烁。
+                .defaultScrollAnchor(.bottom)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        dismissComposerIfNeeded()
+                    }
                 )
-                #if os(iOS)
-                .textInputAutocapitalization(.sentences)
-                #endif
-                .onSubmit {
-                    store.dispatch(.chat(.sendTapped))
+                .onAppear {
+                    pinToLatest(proxy: proxy, animated: false)
                 }
-                Button("发送") { store.dispatch(.chat(.sendTapped)) }
-                    .disabled(store.state.chat.composeDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("重试") { store.dispatch(.chat(.retryQueuedTapped)) }
+                .onDisappear {
+                    scrollToLatestTask?.cancel()
+                    scrollToLatestTask = nil
+                }
+                .onChange(of: store.state.chat.visibleMessages.last?.id) { _, newID in
+                    guard newID != nil else { return }
+                    // 加载更早通常不改 last.id；若正在 restore，跳过钉底。
+                    if restoreScrollMessageID != nil { return }
+                    pinToLatest(proxy: proxy, animated: false)
+                }
+                .onChange(of: store.state.chat.visibleMessages.count) { oldCount, newCount in
+                    guard newCount > oldCount, let anchorID = restoreScrollMessageID else { return }
+                    restoreScrollMessageID = nil
+                    scrollToLatestTask?.cancel()
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(anchorID, anchor: .top)
+                    }
+                }
+                .onChange(of: isComposerFocused) { _, focused in
+                    if focused {
+                        pinToLatest(proxy: proxy, animated: true)
+                    }
+                }
+                #if canImport(UIKit)
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                    pinToLatest(proxy: proxy, animated: true)
+                }
+                #endif
             }
-            .padding()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composerBar
         }
         .navigationTitle(threadTitle)
         #if os(iOS)
@@ -331,16 +361,69 @@ public struct ChatThreadView: View {
         }
     }
 
-    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool) {
-        guard let lastID = store.state.chat.visibleMessages.last?.id else { return }
-        // 等 List 完成布局后再滚，否则偶发停在旧位置。
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(.easeOut(duration: 0.2)) {
+    private var composerBar: some View {
+        HStack(spacing: 10) {
+            #if canImport(PhotosUI)
+            PhotosPicker(selection: $pickerItem, matching: .images) {
+                Image(systemName: "photo")
+            }
+            .disabled(store.state.chat.isBusy)
+            .onChange(of: pickerItem) { _, item in
+                guard let item else { return }
+                Task {
+                    await sendPickedImage(item)
+                    pickerItem = nil
+                }
+            }
+            #endif
+            TextField(
+                "输入消息",
+                text: store.binding(
+                    get: { $0.chat.composeDraft },
+                    send: { .chat(.updateDraft($0)) }
+                )
+            )
+            .focused($isComposerFocused)
+            #if os(iOS)
+            .textInputAutocapitalization(.sentences)
+            #endif
+            .onSubmit {
+                store.dispatch(.chat(.sendTapped))
+            }
+            Button("发送") { store.dispatch(.chat(.sendTapped)) }
+                .disabled(store.state.chat.composeDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("重试") { store.dispatch(.chat(.retryQueuedTapped)) }
+        }
+        .padding()
+        .background(.bar)
+    }
+
+    private func dismissComposerIfNeeded() {
+        guard isComposerFocused else { return }
+        isComposerFocused = false
+    }
+
+    /// List 行 `.id` 往往在下一帧才挂上；用短重试钉底。
+    /// 图片行高由元数据预留，不再靠 150ms 多帧硬顶（会抖）。
+    private func pinToLatest(proxy: ScrollViewProxy, animated: Bool) {
+        scrollToLatestTask?.cancel()
+        scrollToLatestTask = Task { @MainActor in
+            let delays: [UInt64] = [0, 80_000_000]
+            for (index, delay) in delays.enumerated() {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                }
+                guard !Task.isCancelled else { return }
+                guard store.state.chat.activeConversationID == conversationID else { return }
+                guard restoreScrollMessageID == nil else { return }
+                guard let lastID = store.state.chat.visibleMessages.last?.id else { return }
+                if animated, index == 0 {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                } else {
                     proxy.scrollTo(lastID, anchor: .bottom)
                 }
-            } else {
-                proxy.scrollTo(lastID, anchor: .bottom)
             }
         }
     }
@@ -389,32 +472,37 @@ public struct ChatThreadView: View {
     #endif
 }
 
-/// 缩略展示：缓存优先；离屏 onDisappear 取消 Task（高负载 #9）。
+/// 缩略展示：按元数据预留固定框；缓存优先；离屏取消 Task（高负载 #9 / 0064）。
 struct MessageImageBubble: View {
     let objectKey: String
     let conversationID: String
     let media: (any MediaRepository)?
+    var pixelWidth: Int? = nil
+    var pixelHeight: Int? = nil
 
     @State private var image: CGImage?
     @State private var loadTask: Task<Void, Never>?
     @State private var failed = false
 
+    private var reservedSize: CGSize {
+        imageBubbleDisplaySize(width: pixelWidth, height: pixelHeight)
+    }
+
     var body: some View {
-        Group {
+        ZStack {
             if let image {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 220)
             } else if failed {
                 Text("图片加载失败")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 ProgressView()
-                    .frame(width: 120, height: 80)
             }
         }
+        .frame(width: reservedSize.width, height: reservedSize.height)
         .onAppear { startLoad() }
         .onDisappear {
             loadTask?.cancel()
@@ -442,6 +530,14 @@ struct MessageImageBubble: View {
             }
         }
     }
+}
+
+/// 气泡预留尺寸：按 attachment 宽高等比缩进，加载前后行高不变。
+private func imageBubbleDisplaySize(width: Int?, height: Int?, maxSide: CGFloat = 220) -> CGSize {
+    let rawW = CGFloat(max(width ?? 4, 1))
+    let rawH = CGFloat(max(height ?? 3, 1))
+    let scale = min(maxSide / rawW, maxSide / rawH, 1)
+    return CGSize(width: (rawW * scale).rounded(), height: (rawH * scale).rounded())
 }
 
 // MARK: - Environment

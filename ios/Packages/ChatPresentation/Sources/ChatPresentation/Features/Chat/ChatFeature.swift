@@ -50,6 +50,8 @@ public struct ChatState: Equatable, Sendable {
         public let isMine: Bool
         public let messageType: String
         public let imageObjectKey: String?
+        public let imageWidth: Int?
+        public let imageHeight: Int?
 
         public init(
             clientMessageID: String,
@@ -58,7 +60,9 @@ public struct ChatState: Equatable, Sendable {
             status: String,
             isMine: Bool,
             messageType: String = "text",
-            imageObjectKey: String? = nil
+            imageObjectKey: String? = nil,
+            imageWidth: Int? = nil,
+            imageHeight: Int? = nil
         ) {
             self.clientMessageID = clientMessageID
             self.serverMessageID = serverMessageID
@@ -67,6 +71,8 @@ public struct ChatState: Equatable, Sendable {
             self.isMine = isMine
             self.messageType = messageType
             self.imageObjectKey = imageObjectKey
+            self.imageWidth = imageWidth
+            self.imageHeight = imageHeight
         }
 
         public var isImage: Bool { messageType == "image" }
@@ -114,6 +120,9 @@ public enum ChatAction: Sendable {
     case sendImageTapped(Data, width: Int, height: Int, mimeType: String, fileName: String)
     case loadOlderMessagesTapped
     case retryQueuedTapped
+    case copyMessageTapped(String)
+    case deleteLocalMessageTapped(String)
+    case retryMessageTapped(String)
     case syncTapped
     case sceneBecameActive
     case sceneBecameBackground
@@ -143,6 +152,7 @@ public enum ChatFeature {
         switch action {
         case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .sendImageTapped,
              .loadOlderMessagesTapped, .retryQueuedTapped,
+             .copyMessageTapped, .deleteLocalMessageTapped, .retryMessageTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:
@@ -151,7 +161,12 @@ public enum ChatFeature {
             state.peerUserIDInput = value
             state.errorMessage = nil
         case .selectConversation(let id):
+            // 先清空窗口，避免 List onAppear 在脏数据/空数据上误滚，
+            // 并保证后续 conversationOpened 的 last.id 变化一定触发 onChange。
             state.activeConversationID = id
+            state.visibleMessages = []
+            state.oldestLoadedSeq = nil
+            state.hasMoreOlder = false
             state.errorMessage = nil
         case .leaveConversation:
             state.activeConversationID = nil

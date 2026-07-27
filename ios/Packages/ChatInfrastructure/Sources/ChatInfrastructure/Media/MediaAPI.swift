@@ -169,6 +169,18 @@ public final class ImageMediaCache: @unchecked Sendable {
 }
 
 public enum ImageMessageContent {
+    public struct ParsedAttachment: Equatable, Sendable {
+        public let objectKey: String
+        public let width: Int?
+        public let height: Int?
+
+        public init(objectKey: String, width: Int?, height: Int?) {
+            self.objectKey = objectKey
+            self.width = width
+            self.height = height
+        }
+    }
+
     /// 服务端校验的 image content JSON。
     public static func encodeAttachment(_ attachment: Attachment) throws -> String {
         struct Payload: Encodable {
@@ -195,12 +207,23 @@ public enum ImageMessageContent {
     }
 
     public static func parseObjectKey(from content: String?) -> String? {
+        parseAttachment(from: content)?.objectKey
+    }
+
+    public static func parseAttachment(from content: String?) -> ParsedAttachment? {
         guard let content, let data = content.data(using: .utf8) else { return nil }
         struct Payload: Decodable {
-            struct Att: Decodable { let object_key: String? }
+            struct Att: Decodable {
+                let object_key: String?
+                let width: Int?
+                let height: Int?
+            }
             let attachment: Att?
         }
-        return try? JSONDecoder().decode(Payload.self, from: data).attachment?.object_key
+        guard let att = try? JSONDecoder().decode(Payload.self, from: data).attachment,
+              let key = att.object_key, !key.isEmpty
+        else { return nil }
+        return ParsedAttachment(objectKey: key, width: att.width, height: att.height)
     }
 }
 

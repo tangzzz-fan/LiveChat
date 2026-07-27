@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -142,6 +143,8 @@ func (s *LocalObjectStore) PutObject(_ context.Context, key string, data []byte,
 func (s *LocalObjectStore) PresignDownload(_ context.Context, key string, expires time.Duration) (string, error) {
 	exp := time.Now().Add(expires).Unix()
 	sig := s.sign(fmt.Sprintf("%s|%d", key, exp))
+	// object_key 常含 `/` 与 `_`（如 media/u_1/.../img_N_photo.jpg）；不可用 `/`↔`_` 替换，
+	// 否则解码后 key 漂移，HMAC 校验失败，接收方表现为「图片加载失败」。
 	return fmt.Sprintf("/media/download/%s?exp=%d&sig=%s", urlEncode(key), exp, sig), nil
 }
 
@@ -163,11 +166,15 @@ func (s *LocalObjectStore) VerifySignature(key string, exp, sig string) bool {
 }
 
 func urlEncode(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "/", "_"), "+", "-")
+	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
 
-func urlDecode(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "_", "/"), "-", "+")
+func urlDecode(s string) (string, error) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid object key encoding: %w", err)
+	}
+	return string(b), nil
 }
 
 // ── Thumbnail job ─────────────────────────────────
@@ -453,7 +460,10 @@ func (s *Service) ServeDownload(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("missing exp or sig")
 	}
 
-	key := urlDecode(encodedKey)
+	key, err := urlDecode(encodedKey)
+	if err != nil {
+		return err
+	}
 
 	store := s.store.(*LocalObjectStore)
 	if !store.VerifySignature(key, expStr, sig) {
@@ -471,9 +481,11 @@ func (s *Service) ServeDownload(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var mimeType string
-	_ = s.db.QueryRowContext(r.Context(),
-		"SELECT mime_type FROM attachments WHERE object_key=$1", key,
-	).Scan(&mimeType)
+	if s.db != nil {
+		_ = s.db.QueryRowContext(r.Context(),
+			"SELECT mime_type FROM attachments WHERE object_key=$1", key,
+		).Scan(&mimeType)
+	}
 	if mimeType == "" {
 		if strings.HasSuffix(key, ".jpg") || strings.HasSuffix(key, ".jpeg") {
 			mimeType = "image/jpeg"

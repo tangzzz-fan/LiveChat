@@ -65,12 +65,25 @@ public final class ConversationAPI: Sendable {
                 type: row.conversation_type,
                 title: title ?? row.conversation_id,
                 lastMessagePreview: row.last_message_preview,
-                lastMessageAt: nil,
+                lastMessageAt: ConversationListDecoding.parseLastMessageAt(row.last_message_at),
                 unreadCount: row.unread_count,
                 isPinned: row.is_pinned,
                 isMuted: false
             )
         }
+    }
+}
+
+/// 会话列表 API 时间字段解码（0061）。
+public enum ConversationListDecoding {
+    public static func parseLastMessageAt(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: raw) { return date }
+        let basic = ISO8601DateFormatter()
+        basic.formatOptions = [.withInternetDateTime]
+        return basic.date(from: raw)
     }
 }
 

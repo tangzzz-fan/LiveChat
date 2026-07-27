@@ -37,6 +37,8 @@ public protocol MessageStore: Sendable {
     ) throws
     /// 己方消息：`conversation_seq <= upToSeq` 推进为 read（MAX 收敛）。
     func markOwnMessagesRead(conversationID: String, upToSeq: Int64, myUserID: Int64) throws
+    /// 仅删本机投影（0056）；不声称服务端撤回。
+    func deleteLocalMessage(clientMessageID: String) throws
 }
 
 public protocol MessageRemote: Sendable {

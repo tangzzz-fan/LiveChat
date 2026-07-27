@@ -3,6 +3,11 @@ import TGReduxKit
 import ChatApplication
 import ChatInfrastructure
 import ChatDomain
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction> {
@@ -225,6 +230,28 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
         case .retryQueuedTapped:
             store.runTask(id: CancellationID("chat.retryQueued")) {
                 await services.sendExecutor.reclaimStaleSendingAndProcess()
+            }
+        case .copyMessageTapped(let text):
+            copyToPasteboard(text)
+        case .deleteLocalMessageTapped(let clientMessageID):
+            store.runTask(id: CancellationID("chat.deleteLocal.\(clientMessageID)")) {
+                do {
+                    try services.database.deleteLocalMessage(clientMessageID: clientMessageID)
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
+        case .retryMessageTapped(let clientMessageID):
+            store.runTask(id: CancellationID("chat.retryOne.\(clientMessageID)")) {
+                do {
+                    try services.database.updateMessageStatus(
+                        clientMessageID: clientMessageID,
+                        status: .queued
+                    )
+                    await services.sendExecutor.processPending()
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
             }
         case .syncTapped, .sceneBecameActive:
             guard store.state.isLoggedIn else { return }
@@ -458,6 +485,7 @@ private func mapMessageRows(
 ) -> [ChatState.MessageRow] {
     records.map { record in
         let isImage = record.messageType == "image"
+        let attachment = isImage ? ImageMessageContent.parseAttachment(from: record.content) : nil
         let text = isImage ? "[图片]" : TextMessageContent.parseText(from: record.content)
         return ChatState.MessageRow(
             clientMessageID: record.clientMessageID,
@@ -466,7 +494,19 @@ private func mapMessageRows(
             status: record.status,
             isMine: record.senderUserID == myUserID,
             messageType: record.messageType,
-            imageObjectKey: isImage ? ImageMessageContent.parseObjectKey(from: record.content) : nil
+            imageObjectKey: attachment?.objectKey,
+            imageWidth: attachment?.width,
+            imageHeight: attachment?.height
         )
     }
+}
+
+private func copyToPasteboard(_ text: String) {
+#if canImport(UIKit)
+    UIPasteboard.general.string = text
+#elseif canImport(AppKit)
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.setString(text, forType: .string)
+#endif
 }

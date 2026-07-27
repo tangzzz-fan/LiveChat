@@ -241,6 +241,109 @@ func orphanSendingIsReclaimedToQueued() async throws {
 }
 
 @Test
+func conversationSummariesOrderByLastMessageAtNotUpdatedAt() throws {
+    let db = try LocalDatabase.inMemory()
+    let older = Date(timeIntervalSince1970: 1_700_000_000)
+    let newer = Date(timeIntervalSince1970: 1_700_000_100)
+    try db.upsertConversationSummary(
+        ConversationSummary(
+            userID: 1,
+            conversationID: "conv_old_msg",
+            type: "direct",
+            title: "old",
+            lastMessagePreview: "old",
+            lastMessageAt: older,
+            unreadCount: 0
+        )
+    )
+    try db.upsertConversationSummary(
+        ConversationSummary(
+            userID: 1,
+            conversationID: "conv_new_msg",
+            type: "direct",
+            title: "new",
+            lastMessagePreview: "new",
+            lastMessageAt: newer,
+            unreadCount: 0
+        )
+    )
+    // 故意把「旧消息会话」的 updated_at 刷成最新（模拟 clearUnread / 打开会话）。
+    try db.dbQueue.write { dbq in
+        try dbq.execute(
+            sql: """
+            UPDATE conversation_summaries
+            SET updated_at = ?
+            WHERE conversation_id = ?
+            """,
+            arguments: [Int64(newer.timeIntervalSince1970 * 1000) + 999_000, "conv_old_msg"]
+        )
+    }
+    let rows = try db.fetchConversationSummaryRecords(userID: 1)
+    #expect(rows.map(\.conversationID) == ["conv_new_msg", "conv_old_msg"])
+}
+
+@Test
+func clearUnreadDoesNotReorderByUpdatedAt() throws {
+    let db = try LocalDatabase.inMemory()
+    let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+    let t2 = Date(timeIntervalSince1970: 1_700_000_200)
+    try db.upsertConversationSummary(
+        ConversationSummary(
+            userID: 9,
+            conversationID: "a",
+            type: "direct",
+            title: "a",
+            lastMessagePreview: "a",
+            lastMessageAt: t2,
+            unreadCount: 3
+        )
+    )
+    try db.upsertConversationSummary(
+        ConversationSummary(
+            userID: 9,
+            conversationID: "b",
+            type: "direct",
+            title: "b",
+            lastMessagePreview: "b",
+            lastMessageAt: t1,
+            unreadCount: 1
+        )
+    )
+    try db.clearUnread(userID: 9, conversationID: "b")
+    let rows = try db.fetchConversationSummaryRecords(userID: 9)
+    #expect(rows.map(\.conversationID) == ["a", "b"])
+    #expect(rows.first(where: { $0.conversationID == "b" })?.unreadCount == 0)
+}
+
+@Test
+func deleteLocalMessageRemovesRow() throws {
+    let db = try LocalDatabase.inMemory()
+    try db.insertMessage(
+        Message(
+            clientMessageID: "del-1",
+            conversationID: "c1",
+            senderUserID: 1,
+            messageType: "text",
+            content: #"{"text":"bye"}"#,
+            status: .accepted
+        )
+    )
+    try db.deleteLocalMessage(clientMessageID: "del-1")
+    let pending = try db.fetchPendingSend(limit: 10)
+    #expect(pending.isEmpty)
+    let page = try db.fetchLatestMessageWindow(conversationID: "c1")
+    #expect(page.records.isEmpty)
+}
+
+@Test
+func conversationListDecodingParsesFractionalISO8601() {
+    let date = ConversationListDecoding.parseLastMessageAt("2026-07-27T22:54:31.851357+08:00")
+    #expect(date != nil)
+    #expect(ConversationListDecoding.parseLastMessageAt(nil) == nil)
+    #expect(ConversationListDecoding.parseLastMessageAt("") == nil)
+}
+
+@Test
 func silentWakeBudgetTimesOut() async {
     // 极短预算：即使 sync 因未登录很快失败，超时分支也可被单独覆盖。
     // 此处验证 CancellationError 路径映射为 timedOut（用已取消的 Task 语义）。

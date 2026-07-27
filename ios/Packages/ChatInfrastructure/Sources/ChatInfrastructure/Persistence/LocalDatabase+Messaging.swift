@@ -116,6 +116,15 @@ extension LocalDatabase {
         }
     }
 
+    public func deleteLocalMessage(clientMessageID: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM messages WHERE client_message_id = ?",
+                arguments: [clientMessageID]
+            )
+        }
+    }
+
     /// 按 Spec / 高负载 #10：同会话内以 `conversation_seq` 升序；无 seq 的 queued/sending 置底（`created_at` 次序）。
     public func fetchMessages(conversationID: String, limit: Int) throws -> [MessageRecord] {
         try fetchMessageWindow(
@@ -268,9 +277,10 @@ extension LocalDatabase {
     }
 
     public static func conversationSummaries(db: Database, userID: Int64) throws -> [ConversationSummaryRecord] {
+        // 对齐服务端 List：pinned 优先，再按最近消息时间（SQLite DESC 下 NULL 自然靠后）。
         try ConversationSummaryRecord
             .filter(Column("user_id") == userID)
-            .order(Column("updated_at").desc)
+            .order(Column("is_pinned").desc, Column("last_message_at").desc)
             .fetchAll(db)
     }
 
@@ -379,10 +389,7 @@ extension LocalDatabase {
 
     public func fetchConversationSummaryRecords(userID: Int64) throws -> [ConversationSummaryRecord] {
         try dbQueue.read { db in
-            try ConversationSummaryRecord
-                .filter(Column("user_id") == userID)
-                .order(Column("updated_at").desc)
-                .fetchAll(db)
+            try LocalDatabase.conversationSummaries(db: db, userID: userID)
         }
     }
 

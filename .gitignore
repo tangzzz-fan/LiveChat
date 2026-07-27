@@ -58,6 +58,9 @@ secrets/
 deploy/data/
 deploy/prometheus/data/
 deploy/grafana/data/
+
+# Local media object store (dev uploads)
+livechat-server/data/
 .claude/
 .agents/
 # Load test

@@ -111,6 +111,15 @@ public final class FakeMessageStore: MessageStore, @unchecked Sendable {
         }
     }
 
+    public func deleteLocalMessage(clientMessageID: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = byClientID.removeValue(forKey: clientMessageID),
+           let sid = existing.serverMessageID {
+            byServerID.removeValue(forKey: sid)
+        }
+    }
+
     public func message(clientMessageID: String) -> Message? {
         lock.lock()
         defer { lock.unlock() }

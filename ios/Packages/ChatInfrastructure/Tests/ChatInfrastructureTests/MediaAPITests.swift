@@ -22,6 +22,10 @@ func imageMessageContentEncodesAttachmentShape() throws {
     )
     let json = try ImageMessageContent.encodeAttachment(attachment)
     #expect(ImageMessageContent.parseObjectKey(from: json) == "media/u_1/img.jpg")
+    let parsed = ImageMessageContent.parseAttachment(from: json)
+    #expect(parsed?.objectKey == "media/u_1/img.jpg")
+    #expect(parsed?.width == 100)
+    #expect(parsed?.height == 80)
     #expect(json.contains("image/jpeg") || json.contains("image\\/jpeg"))
     #expect(json.contains("12345"))
 }

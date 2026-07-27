@@ -62,18 +62,15 @@ extension LocalDatabase: ConversationStore {
     }
 
     public func clearUnread(userID: Int64, conversationID: String) throws {
+        // 清未读不得 bump updated_at：列表按 last_message_at 排序，避免「刚打开」顶替「最新消息」。
         try dbQueue.write { db in
             try db.execute(
                 sql: """
                 UPDATE conversation_summaries
-                SET unread_count = 0, updated_at = ?
+                SET unread_count = 0
                 WHERE user_id = ? AND conversation_id = ?
                 """,
-                arguments: [
-                    Int64(Date().timeIntervalSince1970 * 1000),
-                    userID,
-                    conversationID,
-                ]
+                arguments: [userID, conversationID]
             )
         }
     }

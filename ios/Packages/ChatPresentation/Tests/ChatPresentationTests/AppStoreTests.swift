@@ -46,3 +46,33 @@ func pushTokenBannerUpdates() {
     store.dispatch(.chat(.setPushTokenBanner("push_token 已注册")))
     #expect(store.state.chat.pushTokenBanner?.contains("push_token") == true)
 }
+
+@Test
+@MainActor
+func selectConversationClearsMessageWindow() {
+    let store = AppStoreFactory.make()
+    store.dispatch(
+        .chat(.conversationOpened(
+            id: "conv_old",
+            messages: [
+                ChatState.MessageRow(
+                    clientMessageID: "m1",
+                    serverMessageID: "s1",
+                    text: "hi",
+                    status: "accepted",
+                    isMine: true
+                )
+            ],
+            oldestLoadedSeq: 1,
+            hasMoreOlder: true
+        ))
+    )
+    #expect(store.state.chat.visibleMessages.count == 1)
+    #expect(store.state.chat.hasMoreOlder)
+
+    store.dispatch(.chat(.selectConversation("conv_new")))
+    #expect(store.state.chat.activeConversationID == "conv_new")
+    #expect(store.state.chat.visibleMessages.isEmpty)
+    #expect(store.state.chat.oldestLoadedSeq == nil)
+    #expect(!store.state.chat.hasMoreOlder)
+}
