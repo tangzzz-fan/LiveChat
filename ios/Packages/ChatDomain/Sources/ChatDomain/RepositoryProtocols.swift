@@ -1,5 +1,14 @@
 import Foundation
 
+// MARK: - 落地说明（Spec 13 §6）
+//
+// 本文件是 Domain「端口」清单 + 共享 DTO。
+// 除 AuthRepository 外，多数协议尚未被 Infrastructure `conform`；
+// 主链路用拆开的具体类型（Executor / API / LocalDatabase）。
+// 完整对照表：docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md
+
+/// 本地消息读写 + 远程发送的粗粒度端口（脚手架）。
+/// 落地：`LocalDatabase` + `MessageAPI` + `MessageSendExecutor`（未直接 conform）。
 public protocol MessageRepository: Sendable {
     func getMessages(in conversationID: String, afterSeq: Int64?, limit: Int) async throws -> [Message]
     func insertMessage(_ message: Message) async throws
@@ -45,11 +54,13 @@ public struct SendMessageResponse: Codable, Sendable {
     }
 }
 
+/// 落地：`ConversationAPI` + `LocalDatabase`（未直接 conform）。
 public protocol ConversationRepository: Sendable {
     func getConversations() async throws -> [ConversationSummary]
     func upsertConversation(_ conversation: ConversationSummary) async throws
 }
 
+/// 落地：`SyncAPI` + `LocalDatabase`；编排见 `SyncExecutor`（未直接 conform）。
 public protocol SyncRepository: Sendable {
     func getSyncCursor() async throws -> Int64
     func updateSyncCursor(_ seq: Int64) async throws
@@ -104,6 +115,7 @@ public struct SyncResponse: Codable, Sendable {
     }
 }
 
+/// ✅ 已实现：`AuthRepositoryLive`。
 public protocol AuthRepository: Sendable {
     func requestCode(phone: String) async throws -> CodeRequestResponse
     func verifyCode(
@@ -140,6 +152,7 @@ public struct AuthTokens: Codable, Sendable {
     }
 }
 
+/// 落地：`PushTokenAPI` + `SilentSyncWakeHandler`（签名不完全对齐，未 conform）。
 public protocol PushRepository: Sendable {
     func registerPushToken(_ token: Data) async throws
     func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) async
@@ -156,6 +169,8 @@ public struct WebSocketFrame: Sendable {
     }
 }
 
+/// 脚手架端口；更贴地的传输抽象是 Infrastructure 的 `WebSocketTransport`。
+/// 落地编排：`RealtimeSession` + `URLSessionWebSocketTransport`（未 conform 本协议）。
 public protocol WebSocketRepository: Sendable {
     func connect() async throws
     func disconnect() async
@@ -163,6 +178,7 @@ public protocol WebSocketRepository: Sendable {
     var messageStream: AsyncStream<WebSocketFrame> { get }
 }
 
+/// 留给 0049；服务端媒体 API 已就绪（0014）。
 public protocol MediaRepository: Sendable {
     func uploadImage(_ data: Data, metadata: ImageMetadata) async throws -> Attachment
     func downloadImage(objectKey: String) async throws -> Data

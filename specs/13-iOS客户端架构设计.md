@@ -235,6 +235,11 @@ actor SyncExecutor {
 
 ## 6. 仓储协议清单
 
+> **落地现状（2026-07）**：文件 `ChatDomain/RepositoryProtocols.swift` 仍是端口清单 + 共享 DTO。  
+> **仅 `AuthRepository` → `AuthRepositoryLive` 真 conform**；消息/会话/同步/推送/WS 主路径用拆开的具体类型（`MessageSendExecutor`、`SyncExecutor`、`RealtimeSession`、`WebSocketTransport` 等）。  
+> 详见 [工程问题 19](../docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md) 与 [ios-client-study-guide §7](../docs/ios-client-study-guide.md)。  
+> 后续演进方向：细粒度 Port（如 `MessageStore` / `MessageRemote`），而非空壳 Adapter 强行凑 conform。
+
 ```swift
 // ChatDomain/RepositoryProtocols.swift
 
