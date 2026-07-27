@@ -2,9 +2,10 @@ import Foundation
 
 // MARK: - 落地说明（Spec 13 §6）
 //
-// 阶段 1（0051）：粗 *Repository 文档降级为历史脚手架。
+// 阶段 1（0051）：粗 *Repository 文档降级。
 // 阶段 2（0052）：细粒度 Store/Remote；Executor 依赖协议；粗协议已删除。
-// 阶段 3（0053）：AppServices 以 Port 组装 + Fake 可测主路径。
+// 阶段 3（0053）：AppServices 以 any Port 组装；FakeMessageStore/Remote 可测主路径。
+// 工程问题 19：resolved。
 //
 // 正式保留：AuthRepository；传输缝 WebSocketTransport（Infra）。
 // 禁止空壳 MessageRepositoryLive 等 Adapter 凑 conform。

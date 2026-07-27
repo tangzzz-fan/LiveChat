@@ -50,7 +50,7 @@
 │  Network, WebSocket, Local DB (GRDB),       │
 │  Keychain, Push, File Cache, Logging        │
 │  实现正式 Port；主路径经 Executor 组合       │
-│  （粗 *Repository 为历史脚手架，见 §6）      │
+│  （粗 *Repository 已删除；见 §6 / 0051–0053） │
 └─────────────────────────────────────────────┘
                    │
 ┌──────────────────┴──────────────────────────┐
@@ -236,13 +236,13 @@ actor SyncExecutor {
 
 ## 6. 仓储协议清单
 
-> **阶段 2（0052）已落地**：粗粒度 `*Repository` 已删除；正式端口为细粒度 Store/Remote，由 Executor 组合。  
+> **阶段 3（0053）已落地**：粗粒度 `*Repository` 已删除；正式端口为细粒度 Store/Remote，由 Executor 组合；`AppServices.make()` 以 `any Port` 装配。  
 > **已验证保留**：`AuthRepository` → `AuthRepositoryLive`；传输缝 `WebSocketTransport` → `URLSessionWebSocketTransport`（会话编排在 `RealtimeSession`，**不要**再引入粗 `WebSocketRepository`）。  
 > **禁止**：写空壳 `MessageRepositoryLive` 等 Adapter。  
-> **测试真相**：`any MessageStore` / `any MessageRemote` / `any SyncRemote` + Fake（见 `PortFakesTests`）；生产仍由 `AppServices.make()` 注入 Live（`LocalDatabase` / `*API` extension conform）。  
+> **测试真相**：`AppServices.assembleSendExecutor` + `FakeMessageStore` / `FakeMessageRemote`（`AppServicesTests`）；Infra 层见 `PortFakesTests`。  
 > `MediaRepository` 仍留给 [0049](../issues/0049-ios-image-message.md)。  
-> 下一步：[0053](../issues/0053-ios-appservices-port-injection-fakes.md) 组合根以 Port 组装。  
-> 对照：[工程问题 19](../docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md) · [ios-client-study-guide §7](../docs/ios-client-study-guide.md)。
+> 工程问题 [19](../docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md)：**resolved**。  
+> 对照：[ios-client-study-guide §7](../docs/ios-client-study-guide.md)。
 
 ### 6.1 正式端口
 

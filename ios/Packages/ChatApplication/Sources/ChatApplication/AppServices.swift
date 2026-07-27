@@ -2,13 +2,19 @@ import Foundation
 import ChatDomain
 import ChatInfrastructure
 
+/// 应用组合根：Live 装配点；Executor 依赖以 `any Port` 注入。
 public struct AppServices: Sendable {
+    /// 投影 / 分页等尚未收进 Port 的表面仍走 Live DB。
     public let database: LocalDatabase
+    public let messageStore: any MessageStore
+    public let conversationStore: any ConversationStore
+    public let syncCursorStore: any SyncCursorStore
+    public let messageRemote: any MessageRemote
+    public let conversationRemote: any ConversationRemote
+    public let syncRemote: any SyncRemote
     public let auth: AuthRepositoryLive
     public let http: HTTPClient
     public let session: SessionStore
-    public let conversations: ConversationAPI
-    public let messages: MessageAPI
     public let sendExecutor: MessageSendExecutor
     public let syncExecutor: SyncExecutor
     public let realtime: RealtimeSession
@@ -20,13 +26,21 @@ public struct AppServices: Sendable {
     public let pathResume: SendPathResumeMonitor
     public let gapBackfill: ConversationGapBackfill
 
+    /// 兼容旧调用方命名（类型已是 Port）。
+    public var conversations: any ConversationRemote { conversationRemote }
+    public var messages: any MessageRemote { messageRemote }
+
     public init(
         database: LocalDatabase,
+        messageStore: any MessageStore,
+        conversationStore: any ConversationStore,
+        syncCursorStore: any SyncCursorStore,
+        messageRemote: any MessageRemote,
+        conversationRemote: any ConversationRemote,
+        syncRemote: any SyncRemote,
         auth: AuthRepositoryLive,
         http: HTTPClient,
         session: SessionStore,
-        conversations: ConversationAPI,
-        messages: MessageAPI,
         sendExecutor: MessageSendExecutor,
         syncExecutor: SyncExecutor,
         realtime: RealtimeSession,
@@ -39,11 +53,15 @@ public struct AppServices: Sendable {
         gapBackfill: ConversationGapBackfill
     ) {
         self.database = database
+        self.messageStore = messageStore
+        self.conversationStore = conversationStore
+        self.syncCursorStore = syncCursorStore
+        self.messageRemote = messageRemote
+        self.conversationRemote = conversationRemote
+        self.syncRemote = syncRemote
         self.auth = auth
         self.http = http
         self.session = session
-        self.conversations = conversations
-        self.messages = messages
         self.sendExecutor = sendExecutor
         self.syncExecutor = syncExecutor
         self.realtime = realtime
@@ -56,6 +74,37 @@ public struct AppServices: Sendable {
         self.gapBackfill = gapBackfill
     }
 
+    // MARK: - Port assembly（唯一 Live / Fake 装配缝）
+
+    public static func assembleSendExecutor(
+        store: any MessageStore,
+        remote: any MessageRemote,
+        sendingTimeoutNanoseconds: UInt64 = MessageSendExecutor.sendingTimeoutNanoseconds
+    ) -> MessageSendExecutor {
+        MessageSendExecutor(
+            store: store,
+            remote: remote,
+            sendingTimeoutNanoseconds: sendingTimeoutNanoseconds
+        )
+    }
+
+    public static func assembleSyncExecutor(
+        cursorStore: any SyncCursorStore,
+        remote: any SyncRemote,
+        messageStore: any MessageStore,
+        conversationStore: any ConversationStore,
+        session: SessionStore
+    ) -> SyncExecutor {
+        SyncExecutor(
+            cursorStore: cursorStore,
+            remote: remote,
+            messageStore: messageStore,
+            conversationStore: conversationStore,
+            session: session
+        )
+    }
+
+    /// 生产组合根：Live Port → Executor。
     public static func make(
         apiBaseURL: URL = URL(string: "http://127.0.0.1:8080")!,
         gatewayWSURL: URL = URL(string: "ws://127.0.0.1:8081/ws")!
@@ -64,13 +113,13 @@ public struct AppServices: Sendable {
         let session = SessionStore()
         let auth = AuthRepositoryLive(http: http, session: session)
         let db = try LocalDatabase.applicationDefault()
-        let conversations = ConversationAPI(http: http, session: session)
-        let messages = MessageAPI(http: http, session: session)
-        let sendExecutor = MessageSendExecutor(store: db, remote: messages)
-        let syncAPI = SyncAPI(http: http, session: session)
-        let syncExecutor = SyncExecutor(
+        let conversationRemote: any ConversationRemote = ConversationAPI(http: http, session: session)
+        let messageRemote: any MessageRemote = MessageAPI(http: http, session: session)
+        let syncRemote: any SyncRemote = SyncAPI(http: http, session: session)
+        let sendExecutor = assembleSendExecutor(store: db, remote: messageRemote)
+        let syncExecutor = assembleSyncExecutor(
             cursorStore: db,
-            remote: syncAPI,
+            remote: syncRemote,
             messageStore: db,
             conversationStore: db,
             session: session
@@ -88,11 +137,15 @@ public struct AppServices: Sendable {
         )
         return AppServices(
             database: db,
+            messageStore: db,
+            conversationStore: db,
+            syncCursorStore: db,
+            messageRemote: messageRemote,
+            conversationRemote: conversationRemote,
+            syncRemote: syncRemote,
             auth: auth,
             http: http,
             session: session,
-            conversations: conversations,
-            messages: messages,
             sendExecutor: sendExecutor,
             syncExecutor: syncExecutor,
             realtime: realtime,

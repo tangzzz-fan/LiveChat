@@ -3,61 +3,6 @@ import Foundation
 import ChatDomain
 @testable import ChatInfrastructure
 
-// MARK: - Fakes
-
-private final class FakeMessageRemote: MessageRemote, @unchecked Sendable {
-    enum Behavior: Sendable {
-        /// 首次挂起直到超时；再次调用直接失败，结束 process 循环。
-        case hangThenFail
-        case succeed(SendMessageResponse)
-    }
-
-    private let behavior: Behavior
-    private var _sendCount = 0
-
-    var sendCount: Int { _sendCount }
-
-    init(behavior: Behavior) {
-        self.behavior = behavior
-    }
-
-    func sendMessage(_ request: SendMessageRequest) async throws -> SendMessageResponse {
-        _sendCount += 1
-        let n = _sendCount
-
-        switch behavior {
-        case .hangThenFail:
-            if n == 1 {
-                try await Task.sleep(nanoseconds: 60_000_000_000)
-                throw CancellationError()
-            }
-            throw HTTPClientError.status(code: 500, body: "fail after hang")
-        case .succeed(let response):
-            return response
-        }
-    }
-}
-
-private final class FakeSyncRemote: SyncRemote, @unchecked Sendable {
-    private let pages: [SyncResponse]
-    private var index = 0
-
-    init(pages: [SyncResponse]) {
-        self.pages = pages
-    }
-
-    func fetchEvents(from cursor: Int64, limit: Int) async throws -> SyncResponse {
-        if index >= pages.count {
-            return SyncResponse(events: [], hasMore: false, latestEventSeq: cursor)
-        }
-        let page = pages[index]
-        index += 1
-        return page
-    }
-}
-
-// MARK: - Tests
-
 @Test
 func fakeMessageRemoteHangTimesOutBackToQueued() async throws {
     let db = try LocalDatabase.inMemory()

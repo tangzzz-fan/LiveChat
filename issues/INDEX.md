@@ -54,4 +54,4 @@
 | [0050](0050-ios-high-load-crosscut-verify.md) | iOS 高负载横切验收：Instruments / 弱网记录 | open | `ready-for-agent`, `p1`, `blocked-by:0044,0045,0046` | 2026-07-27 |
 | [0051](0051-ios-domain-port-drift-docs.md) | iOS Domain 端口漂移：Spec/文档对齐（粗 Repository 降级） | complete | `done`, `p1` | 2026-07-27 |
 | [0052](0052-ios-fine-grained-ports-executor.md) | iOS 细粒度 Port：Store/Remote + Executor 依赖协议 | complete | `done`, `p1`, `blocked-by:0051` | 2026-07-27 |
-| [0053](0053-ios-appservices-port-injection-fakes.md) | iOS AppServices 协议注入 + Fake 可测主路径 | open | `ready-for-agent`, `p1`, `blocked-by:0052` | 2026-07-27 |
+| [0053](0053-ios-appservices-port-injection-fakes.md) | iOS AppServices 协议注入 + Fake 可测主路径 | complete | `done`, `p1`, `blocked-by:0052` | 2026-07-27 |

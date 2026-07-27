@@ -1,8 +1,8 @@
 ---
 id: "0053"
 title: "iOS AppServices 协议注入 + Fake 可测主路径"
-status: open
-labels: ["ready-for-agent", "p1"]
+status: complete
+labels: ["done", "p1"]
 blocked_by: ["0052"]
 created_at: 2026-07-27
 ---
@@ -26,9 +26,9 @@ created_at: 2026-07-27
 
 ## Acceptance criteria
 
-- [ ] IDE Find Usages 以 Port / Executor 为准（不再依赖粗 `MessageRepository` 幻觉）
-- [ ] Fake 组装路径可跑通（无真 HTTP）
-- [ ] 工程问题 19 标记 resolved；INDEX 同步
+- [x] IDE Find Usages 以 Port / Executor 为准（不再依赖粗 `MessageRepository` 幻觉）
+- [x] Fake 组装路径可跑通（无真 HTTP）
+- [x] 工程问题 19 标记 resolved；INDEX 同步
 
 ## 实现备注
 

@@ -21,7 +21,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ChatApplicationTests",
-            dependencies: ["ChatApplication"]
+            dependencies: ["ChatApplication", "ChatInfrastructure", "ChatDomain"]
         ),
     ]
 )
