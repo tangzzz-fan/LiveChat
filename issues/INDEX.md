@@ -58,9 +58,9 @@
 | [0054](0054-ios-read-receipt-unread.md) | iOS 已读回执：进会话清未读 + WS ACK(read) + 气泡状态 | complete | `done`, `p0`, `blocked-by:0041,0044` | 2026-07-27 |
 | [0055](0055-ios-cancel-send-loading-ux.md) | iOS 发送中 loading + 取消发送（未 accepted 前） | complete | `done`, `p1`, `blocked-by:0046` | 2026-07-27 |
 | [0056](0056-ios-message-long-press-menu.md) | iOS 消息长按菜单：复制 / 本地删除 / 失败重试 | complete | `done`, `p1`, `blocked-by:0044` | 2026-07-27 |
-| [0057](0057-ios-message-multi-select.md) | iOS 消息多选模式：批量删除 / 转发入口 | ready-for-agent | `ready-for-agent`, `p1`, `blocked-by:0056` | 2026-07-27 |
+| [0057](0057-ios-message-multi-select.md) | iOS 消息多选模式：批量删除 / 转发入口 | complete | `done`, `p1`, `blocked-by:0056` | 2026-07-27 |
 | [0058](0058-ios-message-forward-share.md) | iOS 消息转发 / 系统分享 | ready-for-agent | `ready-for-agent`, `p2`, `blocked-by:0056` | 2026-07-27 |
-| [0059](0059-ios-message-edit-spike.md) | iOS/服务端 已发消息编辑：协议 spike（先文档） | ready-for-agent | `ready-for-agent`, `p2`, `spike` | 2026-07-27 |
+| [0059](0059-ios-message-edit-spike.md) | iOS/服务端 已发消息编辑：协议 spike（先文档） | complete | `done`, `p2`, `spike` | 2026-07-27 |
 | [0060](0060-fix-media-download-url-encode.md) | 修复图片下载 URL 编码：接收方无法展示对端图片 | complete | `done`, `p0`, `bug` | 2026-07-27 |
 | [0061](0061-ios-conversation-list-sort-by-last-message.md) | iOS 会话列表按 last_message_at 排序（非 updated_at） | complete | `done`, `p0`, `bug` | 2026-07-27 |
 | [0062](0062-ios-chat-keyboard-scroll-dismiss.md) | iOS 聊天页键盘：顶起最新消息 + 点空白失焦 | complete | `done`, `p1`, `ux` | 2026-07-27 |
