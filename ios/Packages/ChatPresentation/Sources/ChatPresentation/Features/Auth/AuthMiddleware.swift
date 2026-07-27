@@ -67,6 +67,8 @@ func makeAuthMiddleware(services: AppServices) -> Middleware<AppState, AppAction
         case .logoutTapped:
             store.runTask(id: CancellationID("auth.logout")) {
                 await services.realtime.stop(reason: "logout")
+                services.projections.stopAll()
+                services.pathResume.stop()
                 try? await services.auth.logout()
                 await store.dispatch(.auth(.loggedOut))
             }

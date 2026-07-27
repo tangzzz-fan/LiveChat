@@ -12,7 +12,8 @@ public enum MessageStatus: String, CaseIterable, Codable, Sendable {
         switch self {
         case .draft: return [.queued]
         case .queued: return [.sending]
-        case .sending: return [.accepted, .failed]
+        // queued：sending 超时 / 进程重启后收回，避免永久卡死（高负载 #5）
+        case .sending: return [.accepted, .failed, .queued]
         case .accepted: return [.delivered]
         case .delivered: return [.read]
         case .read: return []

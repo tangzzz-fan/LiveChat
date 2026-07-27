@@ -23,15 +23,11 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     for summary in remote {
                         try services.database.upsertConversationSummary(summary)
                     }
-                    let local = try services.database.fetchConversationSummaries(userID: session.userID)
-                    let rows = local.map {
-                        ChatState.ConversationRow(
-                            conversationID: $0.conversationID,
-                            title: $0.title ?? $0.conversationID,
-                            preview: $0.lastMessagePreview ?? ""
-                        )
+                    // 列表投影由 ValueObservation 驱动；这里只确保远程已写入 GRDB。
+                    await store.dispatch(.chat(.busy(false)))
+                    await MainActor.run {
+                        ensureConversationObservation(store: store, services: services, userID: session.userID)
                     }
-                    await store.dispatch(.chat(.conversationsLoaded(rows)))
                 } catch {
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
@@ -61,13 +57,11 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                             unreadCount: 0
                         )
                     )
-                    let messages = try loadVisibleMessages(
-                        database: services.database,
+                    try await openConversation(
+                        store: store,
+                        services: services,
                         conversationID: result.conversationID,
                         myUserID: session.userID
-                    )
-                    await store.dispatch(
-                        .chat(.conversationOpened(id: result.conversationID, messages: messages))
                     )
                     await store.dispatch(.chat(.refreshConversationsTapped))
                 } catch {
@@ -78,18 +72,18 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
             store.runTask(id: CancellationID("chat.selectConversation")) {
                 do {
                     guard let session = try services.auth.restoredSession() else { return }
-                    let messages = try loadVisibleMessages(
-                        database: services.database,
+                    try await openConversation(
+                        store: store,
+                        services: services,
                         conversationID: id,
                         myUserID: session.userID
-                    )
-                    await store.dispatch(
-                        .chat(.conversationOpened(id: id, messages: messages))
                     )
                 } catch {
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
+        case .leaveConversation:
+            services.projections.stopMessages()
         case .sendTapped:
             let draft = store.state.chat.composeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
             let conversationID = store.state.chat.activeConversationID
@@ -115,12 +109,6 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     )
                     try await services.sendExecutor.enqueueLocalThenSend(message)
                     await store.dispatch(.chat(.updateDraft("")))
-                    let messages = try loadVisibleMessages(
-                        database: services.database,
-                        conversationID: conversationID,
-                        myUserID: session.userID
-                    )
-                    await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
                     try services.database.upsertConversationSummary(
                         ConversationSummary(
                             userID: session.userID,
@@ -132,28 +120,57 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                             unreadCount: 0
                         )
                     )
-                    await store.dispatch(.chat(.refreshConversationsTapped))
+                    await store.dispatch(.chat(.busy(false)))
+                    // 消息窗 / 列表由 ValueObservation 刷新，不在此手刷。
                 } catch SendQueueError.full {
                     await store.dispatch(.chat(.failed("发送队列已满")))
                 } catch {
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
-        case .retryQueuedTapped:
+        case .loadOlderMessagesTapped:
             let conversationID = store.state.chat.activeConversationID
-            store.runTask(id: CancellationID("chat.retryQueued")) {
-                await services.sendExecutor.processPending()
-                guard
-                    let conversationID,
-                    let session = try? services.auth.restoredSession()
-                else { return }
-                if let messages = try? loadVisibleMessages(
-                    database: services.database,
-                    conversationID: conversationID,
-                    myUserID: session.userID
-                ) {
-                    await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
+            let beforeSeq = store.state.chat.oldestLoadedSeq
+            store.runTask(id: CancellationID("chat.loadOlder")) {
+                guard let conversationID, let beforeSeq else { return }
+                await store.dispatch(.chat(.busy(true)))
+                do {
+                    guard let session = try services.auth.restoredSession() else { return }
+                    let page = try services.database.fetchOlderMessages(
+                        conversationID: conversationID,
+                        beforeSeq: beforeSeq
+                    )
+                    guard let newOldest = page.oldestSeq else {
+                        await store.dispatch(.chat(.busy(false)))
+                        return
+                    }
+                    let window = try loadVisibleMessageWindow(
+                        database: services.database,
+                        conversationID: conversationID,
+                        myUserID: session.userID,
+                        mode: .fromSeq(newOldest)
+                    )
+                    await store.dispatch(.chat(.visibleMessagesUpdated(
+                        window.messages,
+                        oldestLoadedSeq: window.oldestLoadedSeq,
+                        hasMoreOlder: window.hasMoreOlder
+                    )))
+                    await MainActor.run {
+                        bindMessageObservation(
+                            store: store,
+                            services: services,
+                            conversationID: conversationID,
+                            myUserID: session.userID,
+                            mode: .fromSeq(newOldest)
+                        )
+                    }
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
+            }
+        case .retryQueuedTapped:
+            store.runTask(id: CancellationID("chat.retryQueued")) {
+                await services.sendExecutor.reclaimStaleSendingAndProcess()
             }
         case .syncTapped, .sceneBecameActive:
             guard store.state.isLoggedIn else { return }
@@ -166,34 +183,35 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                         .chat(.syncFinished(applied: result.appliedCount, cursor: result.cursor))
                     )
                     await store.dispatch(.chat(.refreshConversationsTapped))
-                    if let activeConversationID,
-                       let session = try? services.auth.restoredSession(),
-                       let messages = try? loadVisibleMessages(
-                           database: services.database,
-                           conversationID: activeConversationID,
-                           myUserID: session.userID
-                       ) {
-                        await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
+                    if let activeConversationID {
+                        _ = try? await services.gapBackfill.backfillIfNeeded(
+                            conversationID: activeConversationID
+                        )
                     }
+                    // 投影由 observation 吸收 DB 写入。
                 } catch {
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
             }
             store.dispatch(.chat(.realtimeEnsureStarted))
+            services.pathResume.start()
         case .sceneBecameBackground:
             store.dispatch(.chat(.realtimeStop))
         case .realtimeEnsureStarted:
             guard store.state.isLoggedIn else { return }
+            if let session = try? services.auth.restoredSession() {
+                ensureConversationObservation(store: store, services: services, userID: session.userID)
+            }
             if services.realtimeListenGate.beginIfNeeded() {
                 // 无 CancellationID：避免同 id 取消导致 AsyncStream 丢订阅。
+                // databaseChanged 不再手刷 Store——ValueObservation 是主路径。
                 store.runTask {
                     for await event in await services.realtime.events {
                         switch event {
                         case .status(let status):
                             await store.dispatch(.chat(.setConnectionBanner(banner(for: status))))
                         case .databaseChanged:
-                            try? await Task.sleep(nanoseconds: 16_000_000)
-                            await refreshLocalProjections(store: store, services: services)
+                            break
                         }
                     }
                 }
@@ -201,6 +219,7 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
             store.runTask(id: CancellationID("chat.realtime.start")) {
                 await services.realtime.start()
             }
+            services.pathResume.start()
         case .realtimeStop:
             store.runTask(id: CancellationID("chat.realtime.stop")) {
                 await services.realtime.stop(reason: "background")
@@ -211,7 +230,6 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
             store.runTask(id: CancellationID("chat.push.register")) {
                 do {
                     let deviceID = try services.auth.currentDeviceID()
-                    // 模拟器无真实 APNs 时仍注册 mock token，便于服务端 devices.push_token 有值。
                     let token = PushTokenFactory.mockToken(deviceID: deviceID)
                     try await services.pushTokenAPI.register(pushToken: token)
                     await store.dispatch(
@@ -235,7 +253,7 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
         case .silentPushWakeTapped:
             store.dispatch(.chat(.silentPushWake(reason: "ui_inject")))
         case .silentPushWake(let reason):
-            // Spec 13 §8.2：唤醒只跑增量 sync，不启动 WS、不做大媒体。
+            // Spec 13 §8.2：唤醒只跑增量 sync，不启动 WS、不做大媒体；≤25s 预算。
             store.runTask(id: CancellationID("chat.push.silentWake")) {
                 await store.dispatch(.chat(.syncStarted))
                 let outcome = await services.silentWake.handleWake(reason: reason)
@@ -244,8 +262,9 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                     await store.dispatch(
                         .chat(.syncFinished(applied: result.appliedCount, cursor: result.cursor))
                     )
-                    // 轻量投影刷新（列表）；避免后台重 UI。
-                    await refreshLocalProjections(store: store, services: services)
+                case .timedOut:
+                    await store.dispatch(.chat(.syncFinished(applied: 0, cursor: -1)))
+                    await store.dispatch(.chat(.setConnectionBanner("静默同步超时（预算）")))
                 case .failure(let error):
                     await store.dispatch(.chat(.failed(error.localizedDescription)))
                 }
@@ -272,38 +291,107 @@ private func banner(for status: RealtimeStatus) -> String {
 }
 
 @MainActor
-private func refreshLocalProjections(
+private func openConversation(
     store: Store<AppState, AppAction>,
-    services: AppServices
-) async {
-    guard let session = try? services.auth.restoredSession() else { return }
-    if let local = try? services.database.fetchConversationSummaries(userID: session.userID) {
-        let rows = local.map {
+    services: AppServices,
+    conversationID: String,
+    myUserID: Int64
+) async throws {
+    let window = try loadVisibleMessageWindow(
+        database: services.database,
+        conversationID: conversationID,
+        myUserID: myUserID,
+        mode: .latestPage
+    )
+    await store.dispatch(
+        .chat(.conversationOpened(
+            id: conversationID,
+            messages: window.messages,
+            oldestLoadedSeq: window.oldestLoadedSeq,
+            hasMoreOlder: window.hasMoreOlder
+        ))
+    )
+    bindMessageObservation(
+        store: store,
+        services: services,
+        conversationID: conversationID,
+        myUserID: myUserID,
+        mode: .latestPage
+    )
+    _ = try? await services.gapBackfill.backfillIfNeeded(conversationID: conversationID)
+}
+
+@MainActor
+private func ensureConversationObservation(
+    store: Store<AppState, AppAction>,
+    services: AppServices,
+    userID: Int64
+) {
+    services.projections.observeConversations(userID: userID) { records in
+        let rows = records.map {
             ChatState.ConversationRow(
                 conversationID: $0.conversationID,
                 title: $0.title ?? $0.conversationID,
                 preview: $0.lastMessagePreview ?? ""
             )
         }
-        await store.dispatch(.chat(.conversationsLoaded(rows)))
-    }
-    if let activeID = store.state.chat.activeConversationID,
-       let messages = try? loadVisibleMessages(
-           database: services.database,
-           conversationID: activeID,
-           myUserID: session.userID
-       ) {
-        await store.dispatch(.chat(.visibleMessagesUpdated(messages)))
+        Task { @MainActor in
+            store.dispatch(.chat(.conversationsLoaded(rows)))
+        }
     }
 }
 
-private func loadVisibleMessages(
+@MainActor
+private func bindMessageObservation(
+    store: Store<AppState, AppAction>,
+    services: AppServices,
+    conversationID: String,
+    myUserID: Int64,
+    mode: MessageWindowLoadMode
+) {
+    services.projections.observeMessageWindow(
+        conversationID: conversationID,
+        mode: mode
+    ) { page in
+        let rows = mapMessageRows(records: page.records, myUserID: myUserID)
+        let oldest = page.oldestSeq
+        let hasMore = page.hasMoreOlder
+        Task { @MainActor in
+            guard store.state.chat.activeConversationID == conversationID else { return }
+            store.dispatch(.chat(.visibleMessagesUpdated(
+                rows,
+                oldestLoadedSeq: oldest,
+                hasMoreOlder: hasMore
+            )))
+        }
+    }
+}
+
+private struct LoadedMessageWindow: Sendable {
+    let messages: [ChatState.MessageRow]
+    let oldestLoadedSeq: Int64?
+    let hasMoreOlder: Bool
+}
+
+private func loadVisibleMessageWindow(
     database: LocalDatabase,
     conversationID: String,
+    myUserID: Int64,
+    mode: MessageWindowLoadMode
+) throws -> LoadedMessageWindow {
+    let page = try database.fetchMessageWindow(conversationID: conversationID, mode: mode)
+    return LoadedMessageWindow(
+        messages: mapMessageRows(records: page.records, myUserID: myUserID),
+        oldestLoadedSeq: page.oldestSeq,
+        hasMoreOlder: page.hasMoreOlder
+    )
+}
+
+private func mapMessageRows(
+    records: [MessageRecord],
     myUserID: Int64
-) throws -> [ChatState.MessageRow] {
-    let records = try database.fetchMessages(conversationID: conversationID, limit: 200)
-    return records.map { record in
+) -> [ChatState.MessageRow] {
+    records.map { record in
         let text = extractText(from: record.content)
         return ChatState.MessageRow(
             clientMessageID: record.clientMessageID,

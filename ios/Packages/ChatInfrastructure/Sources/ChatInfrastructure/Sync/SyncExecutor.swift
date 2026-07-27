@@ -93,12 +93,14 @@ public actor SyncExecutor {
         var touched = Set<String>()
 
         while true {
+            try Task.checkCancellation()
             let page = try await api.fetchEvents(from: cursor, limit: Self.pageSize)
             if page.events.isEmpty {
                 break
             }
 
             for event in page.events {
+                try Task.checkCancellation()
                 let conversationID = try apply(event: event, myUserID: creds.userID)
                 if let conversationID {
                     touched.insert(conversationID)

@@ -56,6 +56,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                     )
                 }
                 completionHandler(result.appliedCount > 0 ? .newData : .noData)
+            case .timedOut:
+                // 预算取消：仍必须调用 completionHandler（Spec 13 §8.2）。
+                await MainActor.run {
+                    store.dispatch(.chat(.setConnectionBanner("静默同步超时（预算）")))
+                }
+                completionHandler(.noData)
             case .failure:
                 completionHandler(.failed)
             }

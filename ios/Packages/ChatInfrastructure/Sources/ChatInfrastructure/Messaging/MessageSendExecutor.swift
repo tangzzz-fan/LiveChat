@@ -125,13 +125,16 @@ public final class MessageAPI: Sendable {
     }
 }
 
-/// 有界发送队列：本地先落库，再 HTTP；429 按 Retry-After + jitter 退避。
+/// 有界发送队列：本地先落库，再 HTTP；429 按 Retry-After + jitter 退避；sending 超时回 queued。
 public actor MessageSendExecutor {
     public static let maxQueueDepth = 100
+    /// sending 卡住上限（弱网 / API 挂起）；超时回 queued，由 path 恢复或重试续跑。
+    public static let sendingTimeoutNanoseconds: UInt64 = 30_000_000_000
 
     private let database: LocalDatabase
     private let api: MessageAPI
     private var isProcessing = false
+    private var sendingStartedAt: [String: ContinuousClock.Instant] = [:]
 
     public init(database: LocalDatabase, api: MessageAPI) {
         self.database = database
@@ -151,12 +154,52 @@ public actor MessageSendExecutor {
         await process()
     }
 
+    /// 路径恢复入口：先收回超时/孤儿 sending，再续跑（不与 429 退避叠成风暴——仍单 actor 串行）。
+    public func reclaimStaleSendingAndProcess() async {
+        _ = try? reclaimStaleSending(now: .now)
+        await process()
+    }
+
+    /// 测试钩子：强制把超时 sending 收回为 queued。
+    public func reclaimStaleSendingForTests(now: ContinuousClock.Instant = .now) throws -> Int {
+        try reclaimStaleSending(now: now)
+    }
+
+    private func reclaimStaleSending(now: ContinuousClock.Instant) throws -> Int {
+        let pending = try database.fetchPendingSend(limit: Self.maxQueueDepth)
+        var count = 0
+        for item in pending where item.status == MessageStatus.sending.rawValue {
+            let stale: Bool
+            if let started = sendingStartedAt[item.clientMessageID] {
+                stale = now - started >= Duration.seconds(30)
+            } else {
+                // 进程重启后无内存计时 → 视为孤儿，收回避免永久卡 sending
+                stale = true
+            }
+            if stale {
+                try database.updateMessageStatus(
+                    clientMessageID: item.clientMessageID,
+                    status: .queued
+                )
+                sendingStartedAt.removeValue(forKey: item.clientMessageID)
+                count += 1
+            }
+        }
+        return count
+    }
+
     private func process() async {
         guard !isProcessing else { return }
         isProcessing = true
         defer { isProcessing = false }
 
         while true {
+            do {
+                _ = try reclaimStaleSending(now: .now)
+            } catch {
+                return
+            }
+
             let batch: [MessageRecord]
             do {
                 batch = try database.fetchPendingSend(limit: 1)
@@ -170,7 +213,8 @@ public actor MessageSendExecutor {
                     clientMessageID: item.clientMessageID,
                     status: .sending
                 )
-                let response = try await api.send(
+                sendingStartedAt[item.clientMessageID] = .now
+                let response = try await sendWithTimeout(
                     SendMessageRequest(
                         clientMessageID: item.clientMessageID,
                         conversationID: item.conversationID,
@@ -184,16 +228,40 @@ public actor MessageSendExecutor {
                     conversationSeq: response.conversationSeq,
                     serverReceivedAtMs: response.serverReceivedAtMs
                 )
+                sendingStartedAt.removeValue(forKey: item.clientMessageID)
             } catch let HTTPClientError.rateLimited(retryAfter, _) {
-                // Stay in sending; wait then retry same client_message_id.
+                // Stay in sending; wait then retry same client_message_id（刷新计时）。
+                sendingStartedAt[item.clientMessageID] = .now
                 let jitter = Double.random(in: 0...(retryAfter * 0.2))
                 try? await Task.sleep(nanoseconds: UInt64((retryAfter + jitter) * 1_000_000_000))
+            } catch is CancellationError {
+                try? database.updateMessageStatus(
+                    clientMessageID: item.clientMessageID,
+                    status: .queued
+                )
+                sendingStartedAt.removeValue(forKey: item.clientMessageID)
             } catch {
                 try? database.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .failed
                 )
+                sendingStartedAt.removeValue(forKey: item.clientMessageID)
             }
+        }
+    }
+
+    private func sendWithTimeout(_ request: SendMessageRequest) async throws -> SendMessageResponse {
+        try await withThrowingTaskGroup(of: SendMessageResponse.self) { group in
+            group.addTask {
+                try await self.api.send(request)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: Self.sendingTimeoutNanoseconds)
+                throw CancellationError()
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 }

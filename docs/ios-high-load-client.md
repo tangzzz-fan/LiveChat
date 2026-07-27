@@ -119,6 +119,25 @@ python run.py --scenario group_fanout --concurrency 30 --duration 30
 - [ ] 突发投递：列表不掉帧级卡顿（去抖生效）  
 - [ ] 重连：不并发建多条 WS；退避可见  
 
+→ 跟踪票：[0050](../issues/0050-ios-high-load-crosscut-verify.md)
+
+## 实现对照（0035 主链路后 · 2026-07）
+
+| # | 场景 | 状态 | 跟踪 |
+|---|------|------|------|
+| 1 | 突发投递去抖 | 已做（0045：ValueObservation + 16ms 去抖） | — |
+| 2 | 大会话滚动分页 | 已做（0044：GRDB 窗 + 加载更早，`pageSize=50`） | — |
+| 3 | 发送队列写风暴 | 已做（0039） | — |
+| 4 | GRDB 写并发 | 基本已做 | — |
+| 5 | 弱网 / 断网 | 已做（0046：path 续跑 + sending→queued 超时） | — |
+| 6 | 重连风暴 | 已做（0041） | — |
+| 7 | 后台唤醒预算 | 已做（0048：≤25s 取消 + completionHandler） | — |
+| 8 | sync 追赶洪流 | 已做（0040） | — |
+| 9 | 内存 / 图片 | 未做 | [0049](../issues/0049-ios-image-message.md) |
+| 10 | 按 conversation_seq 渲染 | 已做（0044：seq 升序；pending 无 seq 置底） | — |
+
+**UI 列表是否前置？** 是 —— 父票说明见 [0043](../issues/0043-ios-high-load-leftover.md)。推荐序：`0044 → (0045∥0047) / (0046∥0048) → 0049? → 0050`。
+
 ## 明确不做
 
 - 用 iOS 模拟器集群打服务端容量  

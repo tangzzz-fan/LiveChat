@@ -44,3 +44,11 @@
 | [0040](0040-ios-incremental-sync.md) | iOS 增量同步：SyncExecutor + 游标 | complete | `done`, `p0`, `blocked-by:0039` | 2026-07-27 |
 | [0041](0041-ios-websocket-realtime.md) | iOS WebSocket 实时投递：protobuf 握手 + MESSAGE_DELIVERY | complete | `done`, `p0`, `blocked-by:0040` | 2026-07-27 |
 | [0042](0042-ios-push-token-silent-sync.md) | iOS Push Token + 静默唤醒触发 sync | complete | `done`, `p0`, `blocked-by:0040,0041` | 2026-07-27 |
+| [0043](0043-ios-high-load-leftover.md) | iOS 高负载剩余落地：UI 列表基础 + 对照 0033 未完成项 | open | `ready-for-agent`, `p0`, `blocked-by:0035,0033` | 2026-07-27 |
+| [0044](0044-ios-chat-list-seq-window.md) | iOS UI 基础：会话列表 + 消息窗按 conversation_seq + 分页 | complete | `p0` | 2026-07-27 |
+| [0045](0045-ios-valueobservation-debounce.md) | iOS ValueObservation 去抖投影（突发投递不掉帧） | complete | `p0` | 2026-07-27 |
+| [0046](0046-ios-weak-network-send-hardening.md) | iOS 弱网发送硬化：path 恢复续跑 + sending 超时 | complete | `p0` | 2026-07-27 |
+| [0047](0047-ios-conversation-gap-backfill.md) | iOS 会话 seq 缺口探测 + 历史补拉 | complete | `p0` | 2026-07-27 |
+| [0048](0048-ios-silent-wake-budget.md) | iOS 静默唤醒预算硬化 | complete | `p1` | 2026-07-27 |
+| [0049](0049-ios-image-message.md) | iOS 图片消息：上传 + 发送 + 展示（高负载 #9） | open | `ready-for-agent`, `p1`, `blocked-by:0044` | 2026-07-27 |
+| [0050](0050-ios-high-load-crosscut-verify.md) | iOS 高负载横切验收：Instruments / 弱网记录 | open | `ready-for-agent`, `p1`, `blocked-by:0044,0045,0046` | 2026-07-27 |

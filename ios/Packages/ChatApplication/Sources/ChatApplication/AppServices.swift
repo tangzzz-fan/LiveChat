@@ -16,6 +16,9 @@ public struct AppServices: Sendable {
     public let realtimeListenGate: RealtimeListenGate
     public let pushTokenAPI: PushTokenAPI
     public let silentWake: SilentSyncWakeHandler
+    public let projections: LocalProjectionObserver
+    public let pathResume: SendPathResumeMonitor
+    public let gapBackfill: ConversationGapBackfill
 
     public init(
         database: LocalDatabase,
@@ -30,7 +33,10 @@ public struct AppServices: Sendable {
         gatewayWSURL: URL,
         realtimeListenGate: RealtimeListenGate = RealtimeListenGate(),
         pushTokenAPI: PushTokenAPI,
-        silentWake: SilentSyncWakeHandler
+        silentWake: SilentSyncWakeHandler,
+        projections: LocalProjectionObserver,
+        pathResume: SendPathResumeMonitor,
+        gapBackfill: ConversationGapBackfill
     ) {
         self.database = database
         self.auth = auth
@@ -45,6 +51,9 @@ public struct AppServices: Sendable {
         self.realtimeListenGate = realtimeListenGate
         self.pushTokenAPI = pushTokenAPI
         self.silentWake = silentWake
+        self.projections = projections
+        self.pathResume = pathResume
+        self.gapBackfill = gapBackfill
     }
 
     public static func make(
@@ -63,6 +72,14 @@ public struct AppServices: Sendable {
         let realtime = RealtimeSession(gatewayURL: gatewayWSURL, database: db, session: session)
         let pushTokenAPI = PushTokenAPI(http: http, session: session)
         let silentWake = SilentSyncWakeHandler(syncExecutor: syncExecutor)
+        let projections = LocalProjectionObserver(database: db)
+        let pathResume = SendPathResumeMonitor(sendExecutor: sendExecutor)
+        let conversationMessages = ConversationMessagesAPI(http: http, session: session)
+        let gapBackfill = ConversationGapBackfill(
+            database: db,
+            api: conversationMessages,
+            session: session
+        )
         return AppServices(
             database: db,
             auth: auth,
@@ -75,7 +92,10 @@ public struct AppServices: Sendable {
             realtime: realtime,
             gatewayWSURL: gatewayWSURL,
             pushTokenAPI: pushTokenAPI,
-            silentWake: silentWake
+            silentWake: silentWake,
+            projections: projections,
+            pathResume: pathResume,
+            gapBackfill: gapBackfill
         )
     }
 }
