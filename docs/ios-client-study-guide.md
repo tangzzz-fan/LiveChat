@@ -2,7 +2,7 @@
 
 面向「做完功能后回头复习」：把各票涉及的技术映射到已有文档，并标明**缺口**与**补齐位置**。
 
-相关决策：[ios-client-rewrite.md](./ios-client-rewrite.md) · 高负载：[ios-high-load-client.md](./ios-high-load-client.md) · 联调：[ios-app-testing.md](./ios-app-testing.md) · Spec：[specs/13-iOS客户端架构设计.md](../specs/13-iOS客户端架构设计.md)
+相关决策：[ios-client-rewrite.md](./ios-client-rewrite.md) · 高负载：[ios-high-load-client.md](./ios-high-load-client.md) · 联调：[ios-app-testing.md](./ios-app-testing.md) · Spec：[specs/13-iOS客户端架构设计.md](../specs/13-iOS客户端架构设计.md) · SDK 分层：[ios-im-sdk-core-vs-ui.md](./ios-im-sdk-core-vs-ui.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # LiveChat iOS（重写脚手架 · 0037）
 
-相关：[`API参考.md`](../docs/API参考.md) · [`ios-client-rewrite.md`](../docs/ios-client-rewrite.md) · **手工联调**：[ios-app-testing.md](../docs/ios-app-testing.md)
+相关：[`API参考.md`](../docs/API参考.md) · [`ios-client-rewrite.md`](../docs/ios-client-rewrite.md) · **手工联调**：[ios-app-testing.md](../docs/ios-app-testing.md) · **Core/UI SDK 分层**：[ios-im-sdk-core-vs-ui.md](../docs/ios-im-sdk-core-vs-ui.md)
 
 ## 目录
 

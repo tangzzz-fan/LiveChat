@@ -103,6 +103,21 @@ cd ../ChatPresentation && swift test
 
 ---
 
+## 7. 横切验收（0050）
+
+结论与步骤见 [ios-high-load-client.md](./ios-high-load-client.md)「建议的横切验收项」。
+
+---
+
+## 8. 已读回执联调（0054）
+
+1. A 发消息给 B（B 不在该会话）→ B 列表未读应累加  
+2. B 点进会话 → 未读角标清零；若 WS 已连接会发 `ACK(read)`  
+3. A 侧手动同步或等 sync → 己方气泡应变为已读标记（✓✓ 高亮）  
+4. 服务端需 gateway + outbox-consumer 消费 `read_receipt`
+
+---
+
 ## 9. 文本输入内容处理（速查）
 
 | 阶段 | 存什么 | 在哪 |
