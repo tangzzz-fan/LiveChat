@@ -103,9 +103,12 @@ cd ../ChatPresentation && swift test
 
 ---
 
-## 8. 已读回执联调（0054）
+## 9. 文本输入内容处理（速查）
 
-1. A 发消息给 B（B 不在该会话）→ B 列表未读应累加  
-2. B 点进会话 → 未读角标清零；若 WS 已连接会发 `ACK(read)`  
-3. A 侧手动同步或等 sync → 己方气泡应变为已读标记（✓✓ 高亮）  
-4. 服务端需 gateway + outbox-consumer 消费 `read_receipt`
+| 阶段 | 存什么 | 在哪 |
+|------|--------|------|
+| 键入 | 纯字符串 | `ChatState.composeDraft`（Redux，不落库） |
+| 发送瞬间 | `{"text":"..."}` | `Message.content` → GRDB + HTTP |
+| 气泡 / 列表预览 | 解析后的纯文本 | `TextMessageContent.parseText` / summary.preview |
+
+代码锚点：`ChatViews` TextField → `ChatMiddleware.sendTapped` → `TextMessageContent` → `MessageSendExecutor`。

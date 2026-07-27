@@ -203,3 +203,28 @@ public enum ImageMessageContent {
         return try? JSONDecoder().decode(Payload.self, from: data).attachment?.object_key
     }
 }
+
+/// 文本消息 `content` 信封：`{"text":"..."}`（与服务端 / HTTP send 对齐）。
+///
+/// 输入框里的纯字符串只存在于 Store `composeDraft`；点发送后才编码进 `Message.content` 落库并上行。
+public enum TextMessageContent {
+    public static func encode(_ text: String) throws -> String {
+        struct Payload: Encodable { let text: String }
+        let data = try JSONEncoder().encode(Payload(text: text))
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw HTTPClientError.invalidResponse
+        }
+        return json
+    }
+
+    public static func parseText(from content: String?) -> String {
+        guard let content, let data = content.data(using: .utf8) else {
+            return content ?? ""
+        }
+        struct Payload: Decodable { let text: String? }
+        if let payload = try? JSONDecoder().decode(Payload.self, from: data), let text = payload.text {
+            return text
+        }
+        return content
+    }
+}

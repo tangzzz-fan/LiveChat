@@ -157,49 +157,24 @@ CREATE TABLE sync_cursors (
 
 ### 5.2 发送队列执行器
 
+**文本输入与 `content` 边界（当前实现）**
+
+- UI `TextField` 只改 Store 草稿 `composeDraft`（纯字符串，**不写 DB**）。
+- 点发送 / Return：`TextMessageContent.encode` → `message_type=text`，`content={"text":"..."}`，再入队。
+- 图片：`ImageMessageContent` → `content={"attachment":{...}}`；列表 preview 用人话（纯文本 / `[图片]`）。
+
+**发送队列（实现：`MessageSendExecutor`）**
+
 ```swift
-actor MessageSendExecutor {
-    private var pendingMessages: [PendingMessage] = []
-    private var isProcessing = false
-    
-    func enqueue(_ message: PendingMessage) {
-        pendingMessages.append(message)
-        Task { await process() }
-    }
-    
-    private func process() async {
-        guard !isProcessing else { return }
-        isProcessing = true
-        defer { isProcessing = false }
-        
-        while let message = pendingMessages.first {
-            do {
-                let result = try await networkService.sendMessage(message)
-                await localDB.updateMessage(
-                    clientMessageId: message.clientMessageId,
-                    serverMessageId: result.serverMessageId,
-                    conversationSeq: result.conversationSeq,
-                    status: .accepted
-                )
-                pendingMessages.removeFirst()
-            } catch {
-                let shouldRetry = retryPolicy.shouldRetry(message.retryCount, error: error)
-                if shouldRetry {
-                    message.retryCount += 1
-                    let delay = retryPolicy.delay(for: message.retryCount)
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                } else {
-                    await localDB.updateMessageStatus(
-                        clientMessageId: message.clientMessageId,
-                        status: .failed
-                    )
-                    pendingMessages.removeFirst()
-                }
-            }
-        }
-    }
-}
+// 本地先落库再 HTTP；content 已是信封字符串
+enqueueLocalThenSend(message) // status=queued
+process() // → sending → HTTP send → accepted / failed / 429 退避
 ```
+
+- 有界队列深度（`maxQueueDepth`）。
+- HTTP `429`：`Retry-After` + jitter，保持 `sending`。
+- `sending` 超时 / 进程重启孤儿：收回为 `queued` 后续跑。
+- 应用重启后从本地 DB 恢复 `queued` / `sending`。
 
 ### 5.3 同步执行器
 

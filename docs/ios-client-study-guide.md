@@ -84,8 +84,29 @@
 
 ### 4.2 发送路径
 
+#### 文本输入 → `content` 信封（当前实现）
+
+```
+TextField
+  └─ 每键入 → ChatAction.updateDraft → Store.composeDraft（纯字符串，仅内存）
+       │
+       ▼ 点「发送」/ 键盘 Return
+ChatMiddleware.sendTapped
+  ├─ trim 空白；空串直接 return
+  ├─ TextMessageContent.encode(draft) → Message.content = {"text":"..."}
+  ├─ messageType = "text"；status = queued
+  ├─ MessageSendExecutor.enqueueLocalThenSend
+  │    ├─ GRDB insert（本地先可见）
+  │    └─ HTTP POST /v1/messages/send（body.content = 同一 JSON 字符串）
+  ├─ composeDraft 清空
+  └─ 会话摘要 preview = 纯文本 draft（非 JSON）
+气泡展示：TextMessageContent.parseText(content) → MessageRow.text
+```
+
 | 边界 | 状态 | 说明 |
 |------|------|------|
+| 草稿不进 DB | ✅ | `composeDraft` 只在 Store；未用 `MessageStatus.draft` 行 |
+| content 必须是 JSON 信封 | ✅ | `{"text":"..."}`，特殊字符由 `JSONEncoder` 转义 |
 | 弱网先落本地 | ✅ | `queued` → `sending` → `accepted` / `failed` |
 | `client_message_id` 幂等 | ✅ | — |
 | 有界发送队列 | ✅ | 满则 `SendQueueError.full` |

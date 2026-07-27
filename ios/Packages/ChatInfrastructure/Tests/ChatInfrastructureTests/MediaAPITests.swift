@@ -4,6 +4,14 @@ import ChatDomain
 @testable import ChatInfrastructure
 
 @Test
+func textMessageContentRoundTripEscapes() throws {
+    let raw = #"hello "world" \ 中文"#
+    let json = try TextMessageContent.encode(raw)
+    #expect(json.contains("\"text\""))
+    #expect(TextMessageContent.parseText(from: json) == raw)
+}
+
+@Test
 func imageMessageContentEncodesAttachmentShape() throws {
     let attachment = Attachment(
         objectKey: "media/u_1/img.jpg",

@@ -113,16 +113,9 @@ public enum IncomingMessageApplier {
     }
 
     private static func previewText(from content: String) -> String {
-        guard let data = content.data(using: .utf8) else { return content }
-        struct Payload: Decodable {
-            let text: String?
-            let attachment: Att?
-            struct Att: Decodable { let object_key: String? }
-        }
-        if let payload = try? JSONDecoder().decode(Payload.self, from: data) {
-            if let text = payload.text { return text }
-            if payload.attachment?.object_key != nil { return "[图片]" }
-        }
+        let text = TextMessageContent.parseText(from: content)
+        if text != content { return text }
+        if ImageMessageContent.parseObjectKey(from: content) != nil { return "[图片]" }
         return content
     }
 }

@@ -308,6 +308,12 @@ public struct ChatThreadView: View {
                         send: { .chat(.updateDraft($0)) }
                     )
                 )
+                #if os(iOS)
+                .textInputAutocapitalization(.sentences)
+                #endif
+                .onSubmit {
+                    store.dispatch(.chat(.sendTapped))
+                }
                 Button("发送") { store.dispatch(.chat(.sendTapped)) }
                     .disabled(store.state.chat.composeDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Button("重试") { store.dispatch(.chat(.retryQueuedTapped)) }

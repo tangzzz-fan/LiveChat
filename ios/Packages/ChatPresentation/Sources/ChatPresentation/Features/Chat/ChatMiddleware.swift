@@ -98,7 +98,8 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                 await store.dispatch(.chat(.busy(true)))
                 do {
                     let clientID = "ios-\(session.deviceID)-\(UUID().uuidString.lowercased())"
-                    let payload = #"{"text":\#(jsonString(draft))}"#
+                    // 纯文本 → content 信封 {"text":"..."}；不把草稿直接当 content 上行。
+                    let payload = try TextMessageContent.encode(draft)
                     let message = Message(
                         clientMessageID: clientID,
                         conversationID: conversationID,
@@ -457,7 +458,7 @@ private func mapMessageRows(
 ) -> [ChatState.MessageRow] {
     records.map { record in
         let isImage = record.messageType == "image"
-        let text = isImage ? "[图片]" : extractText(from: record.content)
+        let text = isImage ? "[图片]" : TextMessageContent.parseText(from: record.content)
         return ChatState.MessageRow(
             clientMessageID: record.clientMessageID,
             serverMessageID: record.serverMessageID,
@@ -468,20 +469,4 @@ private func mapMessageRows(
             imageObjectKey: isImage ? ImageMessageContent.parseObjectKey(from: record.content) : nil
         )
     }
-}
-
-private func extractText(from content: String?) -> String {
-    guard let content, let data = content.data(using: .utf8) else {
-        return content ?? ""
-    }
-    struct Payload: Decodable { let text: String? }
-    if let payload = try? JSONDecoder().decode(Payload.self, from: data), let text = payload.text {
-        return text
-    }
-    return content
-}
-
-private func jsonString(_ value: String) -> String {
-    let data = try? JSONEncoder().encode(value)
-    return data.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
 }
