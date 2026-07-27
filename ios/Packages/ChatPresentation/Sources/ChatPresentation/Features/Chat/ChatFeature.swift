@@ -20,6 +20,23 @@ public struct ChatState: Equatable, Sendable {
     /// 0057：多选模式；选中集合为 client_message_id。
     public var isMultiSelecting: Bool
     public var selectedClientMessageIDs: Set<String>
+    /// 0058：转发目标会话选择器。
+    public var isForwardPickerPresented: Bool
+    public var pendingForwardIDs: [String]
+    /// 0058：系统分享（文本或临时图片路径）。
+    public var sharePresentation: SharePresentation?
+
+    public enum SharePresentation: Equatable, Sendable, Identifiable {
+        case text(String)
+        case imageFilePath(String)
+
+        public var id: String {
+            switch self {
+            case .text(let value): return "text:\(value.prefix(64))"
+            case .imageFilePath(let path): return "img:\(path)"
+            }
+        }
+    }
 
     public struct ConversationRow: Equatable, Sendable, Identifiable {
         public var id: String { conversationID }
@@ -96,7 +113,10 @@ public struct ChatState: Equatable, Sendable {
         isSyncing: Bool = false,
         pushTokenBanner: String? = nil,
         isMultiSelecting: Bool = false,
-        selectedClientMessageIDs: Set<String> = []
+        selectedClientMessageIDs: Set<String> = [],
+        isForwardPickerPresented: Bool = false,
+        pendingForwardIDs: [String] = [],
+        sharePresentation: SharePresentation? = nil
     ) {
         self.peerUserIDInput = peerUserIDInput
         self.conversationRows = conversationRows
@@ -113,6 +133,9 @@ public struct ChatState: Equatable, Sendable {
         self.pushTokenBanner = pushTokenBanner
         self.isMultiSelecting = isMultiSelecting
         self.selectedClientMessageIDs = selectedClientMessageIDs
+        self.isForwardPickerPresented = isForwardPickerPresented
+        self.pendingForwardIDs = pendingForwardIDs
+        self.sharePresentation = sharePresentation
     }
 }
 
@@ -136,6 +159,13 @@ public enum ChatAction: Sendable {
     case exitMultiSelect
     case batchDeleteSelectedTapped
     case forwardSelectedTapped
+    case forwardMessageTapped(String)
+    case dismissForwardPicker
+    case confirmForwardToConversation(String)
+    case shareMessageTapped(String)
+    case shareSelectedTapped
+    case presentShare(ChatState.SharePresentation)
+    case clearSharePresentation
     case syncTapped
     case sceneBecameActive
     case sceneBecameBackground
@@ -166,7 +196,8 @@ public enum ChatFeature {
         case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .sendImageTapped,
              .loadOlderMessagesTapped, .retryQueuedTapped,
              .copyMessageTapped, .deleteLocalMessageTapped, .retryMessageTapped,
-             .cancelSendTapped, .batchDeleteSelectedTapped, .forwardSelectedTapped,
+             .cancelSendTapped, .batchDeleteSelectedTapped,
+             .confirmForwardToConversation, .shareMessageTapped, .shareSelectedTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:
@@ -182,16 +213,14 @@ public enum ChatFeature {
             state.oldestLoadedSeq = nil
             state.hasMoreOlder = false
             state.errorMessage = nil
-            state.isMultiSelecting = false
-            state.selectedClientMessageIDs = []
+            ChatFeature.clearSelectionAndForward(&state)
         case .leaveConversation:
             state.activeConversationID = nil
             state.visibleMessages = []
             state.oldestLoadedSeq = nil
             state.hasMoreOlder = false
             state.composeDraft = ""
-            state.isMultiSelecting = false
-            state.selectedClientMessageIDs = []
+            ChatFeature.clearSelectionAndForward(&state)
         case .enterMultiSelect(let clientMessageID):
             state.isMultiSelecting = true
             state.selectedClientMessageIDs = [clientMessageID]
@@ -206,6 +235,25 @@ public enum ChatFeature {
         case .exitMultiSelect:
             state.isMultiSelecting = false
             state.selectedClientMessageIDs = []
+        case .forwardSelectedTapped:
+            let ordered = state.visibleMessages
+                .map(\.clientMessageID)
+                .filter { state.selectedClientMessageIDs.contains($0) }
+            guard !ordered.isEmpty else { return }
+            state.pendingForwardIDs = ordered
+            state.isForwardPickerPresented = true
+            state.errorMessage = nil
+        case .forwardMessageTapped(let clientMessageID):
+            state.pendingForwardIDs = [clientMessageID]
+            state.isForwardPickerPresented = true
+            state.errorMessage = nil
+        case .dismissForwardPicker:
+            state.isForwardPickerPresented = false
+            state.pendingForwardIDs = []
+        case .presentShare(let payload):
+            state.sharePresentation = payload
+        case .clearSharePresentation:
+            state.sharePresentation = nil
         case .updateDraft(let text):
             state.composeDraft = text
         case .busy(let busy):
@@ -224,8 +272,7 @@ public enum ChatFeature {
             state.hasMoreOlder = hasMore
             state.isBusy = false
             state.errorMessage = nil
-            state.isMultiSelecting = false
-            state.selectedClientMessageIDs = []
+            ChatFeature.clearSelectionAndForward(&state)
         case .visibleMessagesUpdated(let messages, let oldest, let hasMore):
             state.visibleMessages = messages
             state.oldestLoadedSeq = oldest
@@ -255,5 +302,12 @@ public enum ChatFeature {
         case .reset:
             state = ChatState()
         }
+    }
+
+    private static func clearSelectionAndForward(_ state: inout ChatState) {
+        state.isMultiSelecting = false
+        state.selectedClientMessageIDs = []
+        state.isForwardPickerPresented = false
+        state.pendingForwardIDs = []
     }
 }

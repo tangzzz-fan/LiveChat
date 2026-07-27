@@ -39,6 +39,8 @@ public protocol MessageStore: Sendable {
     func markOwnMessagesRead(conversationID: String, upToSeq: Int64, myUserID: Int64) throws
     /// 仅删本机投影（0056）；不声称服务端撤回。
     func deleteLocalMessage(clientMessageID: String) throws
+    /// 按 client_message_id 读取（转发 / 分享用）。
+    func fetchMessage(clientMessageID: String) throws -> Message?
 }
 
 public protocol MessageRemote: Sendable {

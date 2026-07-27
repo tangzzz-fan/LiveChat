@@ -303,6 +303,12 @@ public struct ChatThreadView: View {
                                         store.dispatch(.chat(.copyMessageTapped(message.text)))
                                     }
                                 }
+                                Button("转发") {
+                                    store.dispatch(.chat(.forwardMessageTapped(message.clientMessageID)))
+                                }
+                                Button("分享") {
+                                    store.dispatch(.chat(.shareMessageTapped(message.clientMessageID)))
+                                }
                                 Button("选择") {
                                     store.dispatch(.chat(.enterMultiSelect(message.clientMessageID)))
                                 }
@@ -405,7 +411,39 @@ public struct ChatThreadView: View {
                 }
             }
         }
+        .sheet(
+            isPresented: Binding(
+                get: { store.state.chat.isForwardPickerPresented },
+                set: { if !$0 { store.dispatch(.chat(.dismissForwardPicker)) } }
+            )
+        ) {
+            ForwardConversationPickerView(
+                excludeConversationID: conversationID,
+                rows: store.state.chat.conversationRows
+            )
+        }
+        #if canImport(UIKit)
+        .sheet(
+            item: Binding(
+                get: { store.state.chat.sharePresentation },
+                set: { if $0 == nil { store.dispatch(.chat(.clearSharePresentation)) } }
+            )
+        ) { payload in
+            ActivityShareView(items: activityItems(for: payload))
+        }
+        #endif
     }
+
+    #if canImport(UIKit)
+    private func activityItems(for payload: ChatState.SharePresentation) -> [Any] {
+        switch payload {
+        case .text(let text):
+            return [text]
+        case .imageFilePath(let path):
+            return [URL(fileURLWithPath: path)]
+        }
+    }
+    #endif
 
     private var multiSelectBar: some View {
         HStack(spacing: 16) {
@@ -415,6 +453,10 @@ public struct ChatThreadView: View {
             .disabled(store.state.chat.selectedClientMessageIDs.isEmpty)
             Button("转发") {
                 store.dispatch(.chat(.forwardSelectedTapped))
+            }
+            .disabled(store.state.chat.selectedClientMessageIDs.isEmpty)
+            Button("分享") {
+                store.dispatch(.chat(.shareSelectedTapped))
             }
             .disabled(store.state.chat.selectedClientMessageIDs.isEmpty)
             Spacer()
@@ -602,6 +644,72 @@ private func imageBubbleDisplaySize(width: Int?, height: Int?, maxSide: CGFloat 
     let scale = min(maxSide / rawW, maxSide / rawH, 1)
     return CGSize(width: (rawW * scale).rounded(), height: (rawH * scale).rounded())
 }
+
+// MARK: - Forward / Share (0058)
+
+struct ForwardConversationPickerView: View {
+    @Environment(Store<AppState, AppAction>.self) private var store
+    let excludeConversationID: String
+    let rows: [ChatState.ConversationRow]
+
+    private var candidates: [ChatState.ConversationRow] {
+        rows.filter { $0.conversationID != excludeConversationID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if candidates.isEmpty {
+                    ContentUnavailableView(
+                        "没有其他会话",
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text("先打开另一会话，再回来转发")
+                    )
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(candidates) { row in
+                        Button {
+                            store.dispatch(.chat(.confirmForwardToConversation(row.conversationID)))
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.title.isEmpty ? row.conversationID : row.title)
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                if !row.preview.isEmpty {
+                                    Text(row.preview)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("转发到")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { store.dispatch(.chat(.dismissForwardPicker)) }
+                }
+            }
+        }
+    }
+}
+
+#if canImport(UIKit)
+struct ActivityShareView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
 
 // MARK: - Environment
 

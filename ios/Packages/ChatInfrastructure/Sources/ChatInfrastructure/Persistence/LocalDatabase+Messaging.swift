@@ -127,6 +127,15 @@ extension LocalDatabase {
         }
     }
 
+    public func fetchMessage(clientMessageID: String) throws -> Message? {
+        try dbQueue.read { db in
+            try MessageRecord
+                .filter(Column("client_message_id") == clientMessageID)
+                .fetchOne(db)?
+                .toDomainMessage()
+        }
+    }
+
     /// 按 Spec / 高负载 #10：同会话内以 `conversation_seq` 升序；无 seq 的 queued/sending 置底（`created_at` 次序）。
     public func fetchMessages(conversationID: String, limit: Int) throws -> [MessageRecord] {
         try fetchMessageWindow(

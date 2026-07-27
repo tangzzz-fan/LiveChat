@@ -121,6 +121,12 @@ public final class FakeMessageStore: MessageStore, @unchecked Sendable {
         }
     }
 
+    public func fetchMessage(clientMessageID: String) throws -> Message? {
+        lock.lock()
+        defer { lock.unlock() }
+        return byClientID[clientMessageID]
+    }
+
     public func message(clientMessageID: String) -> Message? {
         lock.lock()
         defer { lock.unlock() }

@@ -92,3 +92,49 @@ func multiSelectEnterToggleAndExit() {
     #expect(!store.state.chat.isMultiSelecting)
     #expect(store.state.chat.selectedClientMessageIDs.isEmpty)
 }
+
+@Test
+@MainActor
+func forwardPickerOpensFromMultiSelectAndDismisses() {
+    let store = AppStoreFactory.make()
+    store.dispatch(
+        .chat(
+            .conversationOpened(
+                id: "c1",
+                messages: [
+                    .init(clientMessageID: "m1", serverMessageID: nil, text: "a", status: "accepted", isMine: true),
+                    .init(clientMessageID: "m2", serverMessageID: nil, text: "b", status: "accepted", isMine: true),
+                ],
+                oldestLoadedSeq: 1,
+                hasMoreOlder: false
+            )
+        )
+    )
+    store.dispatch(.chat(.enterMultiSelect("m1")))
+    store.dispatch(.chat(.toggleMessageSelection("m2")))
+    store.dispatch(.chat(.forwardSelectedTapped))
+    #expect(store.state.chat.isForwardPickerPresented)
+    #expect(store.state.chat.pendingForwardIDs == ["m1", "m2"])
+    store.dispatch(.chat(.dismissForwardPicker))
+    #expect(!store.state.chat.isForwardPickerPresented)
+    #expect(store.state.chat.pendingForwardIDs.isEmpty)
+}
+
+@Test
+@MainActor
+func forwardMessageTappedOpensPickerForSingle() {
+    let store = AppStoreFactory.make()
+    store.dispatch(.chat(.forwardMessageTapped("solo")))
+    #expect(store.state.chat.isForwardPickerPresented)
+    #expect(store.state.chat.pendingForwardIDs == ["solo"])
+}
+
+@Test
+@MainActor
+func presentShareAndClear() {
+    let store = AppStoreFactory.make()
+    store.dispatch(.chat(.presentShare(.text("hello"))))
+    #expect(store.state.chat.sharePresentation == .text("hello"))
+    store.dispatch(.chat(.clearSharePresentation))
+    #expect(store.state.chat.sharePresentation == nil)
+}

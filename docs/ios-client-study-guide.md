@@ -114,6 +114,7 @@ ChatMiddleware.sendTapped
 | path 恢复续跑 | ✅（0046） | `SendPathResumeMonitor` → `reclaimStaleSendingAndProcess` |
 | sending 超时/孤儿 | ✅（0046） | 超时或无内存计时 → **queued**（允许 `sending→queued`） |
 | 用户取消发送 | ✅（0055） | `queued`/`sending` → **cancelled**（终态，不自动续跑）；与超时回 queued 区分 |
+| 转发 ≠ 服务端引用 | ✅（0058） | 新 `client_message_id` + 内容等价发送；见 Spec 13 §9.1 |
 | 自己发的消息不靠 sync 回环 | ✅ | — |
 | 展示排序 | ✅（0044） | 按 `conversation_seq`；无 seq 的 pending 置底 |
 

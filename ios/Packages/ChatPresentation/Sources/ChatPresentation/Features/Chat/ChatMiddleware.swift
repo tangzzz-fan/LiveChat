@@ -257,7 +257,9 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
             store.runTask(id: CancellationID("chat.cancelSend.\(clientMessageID)")) {
                 await services.sendExecutor.cancelSend(clientMessageID: clientMessageID)
             }
-        case .enterMultiSelect, .toggleMessageSelection, .exitMultiSelect:
+        case .enterMultiSelect, .toggleMessageSelection, .exitMultiSelect,
+             .dismissForwardPicker, .presentShare, .clearSharePresentation,
+             .forwardSelectedTapped, .forwardMessageTapped:
             break
         case .batchDeleteSelectedTapped:
             let ids = Array(store.state.chat.selectedClientMessageIDs)
@@ -267,9 +269,126 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
                 }
                 await store.dispatch(.chat(.exitMultiSelect))
             }
-        case .forwardSelectedTapped:
-            // 0058 完整转发；此处仅占位提示。
-            store.dispatch(.chat(.failed("转发功能见 0058（尚未实现）")))
+        case .confirmForwardToConversation(let targetConversationID):
+            let sourceIDs = store.state.chat.pendingForwardIDs
+            let sourceConversationID = store.state.chat.activeConversationID
+            let targetTitle = store.state.chat.conversationRows
+                .first(where: { $0.conversationID == targetConversationID })?.title
+            store.runTask(id: CancellationID("chat.forward")) {
+                guard !sourceIDs.isEmpty else {
+                    await store.dispatch(.chat(.dismissForwardPicker))
+                    return
+                }
+                guard targetConversationID != sourceConversationID else {
+                    await store.dispatch(.chat(.failed("请选择另一会话")))
+                    return
+                }
+                guard let session = try? services.auth.restoredSession() else {
+                    await store.dispatch(.chat(.failed("未登录")))
+                    return
+                }
+                await store.dispatch(.chat(.busy(true)))
+                do {
+                    var lastPreview = "转发"
+                    for clientMessageID in sourceIDs {
+                        guard let original = try services.database.fetchMessage(clientMessageID: clientMessageID) else {
+                            continue
+                        }
+                        guard original.messageType == "text" || original.messageType == "image" else {
+                            continue
+                        }
+                        let newClientID = "ios-\(session.deviceID)-\(UUID().uuidString.lowercased())"
+                        let message = Message(
+                            clientMessageID: newClientID,
+                            conversationID: targetConversationID,
+                            senderUserID: session.userID,
+                            messageType: original.messageType,
+                            content: original.content,
+                            status: .queued
+                        )
+                        try await services.sendExecutor.enqueueLocalThenSend(message)
+                        if original.messageType == "image" {
+                            lastPreview = "[图片]"
+                        } else {
+                            lastPreview = TextMessageContent.parseText(from: original.content)
+                        }
+                    }
+                    try services.database.upsertConversationSummary(
+                        ConversationSummary(
+                            userID: session.userID,
+                            conversationID: targetConversationID,
+                            type: "direct",
+                            title: targetTitle,
+                            lastMessagePreview: lastPreview,
+                            lastMessageAt: Date(),
+                            unreadCount: 0
+                        )
+                    )
+                    await store.dispatch(.chat(.dismissForwardPicker))
+                    await store.dispatch(.chat(.exitMultiSelect))
+                    await store.dispatch(.chat(.busy(false)))
+                    await store.dispatch(.chat(.selectConversation(targetConversationID)))
+                } catch SendQueueError.full {
+                    await store.dispatch(.chat(.failed("发送队列已满")))
+                } catch {
+                    await store.dispatch(.chat(.failed(error.localizedDescription)))
+                }
+            }
+        case .shareMessageTapped(let clientMessageID):
+            let conversationID = store.state.chat.activeConversationID
+            store.runTask(id: CancellationID("chat.share.\(clientMessageID)")) {
+                guard let message = try? services.database.fetchMessage(clientMessageID: clientMessageID) else {
+                    await store.dispatch(.chat(.failed("消息不存在")))
+                    return
+                }
+                if let payload = await sharePayload(
+                    for: message,
+                    conversationID: conversationID,
+                    media: services.media
+                ) {
+                    await store.dispatch(.chat(.presentShare(payload)))
+                } else {
+                    await store.dispatch(.chat(.failed("无法分享该消息")))
+                }
+            }
+        case .shareSelectedTapped:
+            let ordered = store.state.chat.visibleMessages
+                .map(\.clientMessageID)
+                .filter { store.state.chat.selectedClientMessageIDs.contains($0) }
+            let conversationID = store.state.chat.activeConversationID
+            store.runTask(id: CancellationID("chat.shareSelected")) {
+                var textParts: [String] = []
+                var imageFilePath: String?
+                for id in ordered {
+                    guard let message = try? services.database.fetchMessage(clientMessageID: id) else {
+                        continue
+                    }
+                    if message.messageType == "text" {
+                        textParts.append(TextMessageContent.parseText(from: message.content))
+                    } else if message.messageType == "image" {
+                        if imageFilePath == nil,
+                           let payload = await sharePayload(
+                               for: message,
+                               conversationID: conversationID,
+                               media: services.media
+                           ),
+                           case .imageFilePath(let path) = payload {
+                            imageFilePath = path
+                        } else {
+                            textParts.append("[图片]")
+                        }
+                    }
+                }
+                if let imageFilePath, textParts.isEmpty {
+                    await store.dispatch(.chat(.presentShare(.imageFilePath(imageFilePath))))
+                } else if !textParts.isEmpty {
+                    await store.dispatch(.chat(.presentShare(.text(textParts.joined(separator: "\n")))))
+                } else if let imageFilePath {
+                    await store.dispatch(.chat(.presentShare(.imageFilePath(imageFilePath))))
+                } else {
+                    await store.dispatch(.chat(.failed("没有可分享的内容")))
+                }
+            }
         case .syncTapped, .sceneBecameActive:
             guard store.state.isLoggedIn else { return }
             let activeConversationID = store.state.chat.activeConversationID
@@ -526,4 +645,44 @@ private func copyToPasteboard(_ text: String) {
     pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)
 #endif
+}
+
+/// 0058：文本明文分享；图片优先本地缓存，必要时按原会话授权下载，再降级为占位文案。
+private func sharePayload(
+    for message: Message,
+    conversationID: String?,
+    media: any MediaRepository
+) async -> ChatState.SharePresentation? {
+    switch message.messageType {
+    case "text":
+        return .text(TextMessageContent.parseText(from: message.content))
+    case "image":
+        guard let attachment = ImageMessageContent.parseAttachment(from: message.content) else {
+            return .text("[图片]")
+        }
+        if let cached = ImageMediaCache.shared.data(forKey: attachment.objectKey) {
+            return writeShareImageTempFile(cached)
+        }
+        if let conversationID,
+           let data = try? await media.downloadImage(
+               objectKey: attachment.objectKey,
+               conversationID: conversationID
+           ) {
+            return writeShareImageTempFile(data)
+        }
+        return .text("[图片]（本地无缓存，无法分享原图）")
+    default:
+        return nil
+    }
+}
+
+private func writeShareImageTempFile(_ data: Data) -> ChatState.SharePresentation {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("livechat-share-\(UUID().uuidString).jpg")
+    do {
+        try data.write(to: url, options: .atomic)
+        return .imageFilePath(url.path)
+    } catch {
+        return .text("[图片]")
+    }
 }

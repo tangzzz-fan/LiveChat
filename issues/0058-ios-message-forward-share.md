@@ -1,8 +1,8 @@
 ---
 id: "0058"
 title: "iOS 消息转发 / 系统分享"
-status: ready-for-agent
-labels: ["ready-for-agent", "p2"]
+status: complete
+labels: ["done", "p2"]
 blocked_by: ["0056"]
 created_at: 2026-07-27
 ---
@@ -22,9 +22,9 @@ created_at: 2026-07-27
 
 ## Acceptance criteria
 
-- [ ] 单条可转发到另一已存在会话并出现在目标会话
-- [ ] 系统分享至少覆盖文本；图片有合理降级
-- [ ] 多选转发：要么支持批量逐条发送，要么明确仅支持单条并禁用多选转发
+- [x] 单条可转发到另一已存在会话并出现在目标会话
+- [x] 系统分享至少覆盖文本；图片有合理降级
+- [x] 多选转发：要么支持批量逐条发送，要么明确仅支持单条并禁用多选转发
 
 ## Depends
 
@@ -33,3 +33,9 @@ created_at: 2026-07-27
 ## Related
 
 - `MessageSendExecutor` · `MediaAPI` · 会话列表选人 UI
+
+## Implementation notes
+
+- 转发：`pendingForwardIDs` + 会话 sheet → `confirmForwardToConversation` 逐条 `enqueueLocalThenSend`（新 `client_message_id`，复用 content）
+- 分享：`presentShare` → `UIActivityViewController`；图片缓存 / 原会话下载 / 文案降级
+- 语义文档：Spec 13 §9.1
