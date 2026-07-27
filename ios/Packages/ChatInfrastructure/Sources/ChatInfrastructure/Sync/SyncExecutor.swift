@@ -60,14 +60,24 @@ public struct SyncRunResult: Sendable, Equatable {
 public actor SyncExecutor {
     public static let pageSize = 50
 
-    private let database: LocalDatabase
-    private let api: SyncAPI
+    private let cursorStore: any SyncCursorStore
+    private let remote: any SyncRemote
+    private let messageStore: any MessageStore
+    private let conversationStore: any ConversationStore
     private let session: SessionStore
     private var isRunning = false
 
-    public init(database: LocalDatabase, api: SyncAPI, session: SessionStore) {
-        self.database = database
-        self.api = api
+    public init(
+        cursorStore: any SyncCursorStore,
+        remote: any SyncRemote,
+        messageStore: any MessageStore,
+        conversationStore: any ConversationStore,
+        session: SessionStore
+    ) {
+        self.cursorStore = cursorStore
+        self.remote = remote
+        self.messageStore = messageStore
+        self.conversationStore = conversationStore
         self.session = session
     }
 
@@ -75,7 +85,7 @@ public actor SyncExecutor {
         guard !isRunning else {
             // Single-flight：已有一轮在跑则直接返回当前游标。
             let creds = try session.load()
-            let cursor = try database.getSyncCursor(
+            let cursor = try cursorStore.getSyncCursor(
                 userID: creds?.userID ?? 0,
                 deviceID: creds?.deviceID ?? ""
             )
@@ -88,13 +98,13 @@ public actor SyncExecutor {
             throw HTTPClientError.status(code: 401, body: "not logged in")
         }
 
-        var cursor = try database.getSyncCursor(userID: creds.userID, deviceID: creds.deviceID)
+        var cursor = try cursorStore.getSyncCursor(userID: creds.userID, deviceID: creds.deviceID)
         var applied = 0
         var touched = Set<String>()
 
         while true {
             try Task.checkCancellation()
-            let page = try await api.fetchEvents(from: cursor, limit: Self.pageSize)
+            let page = try await remote.fetchEvents(from: cursor, limit: Self.pageSize)
             if page.events.isEmpty {
                 break
             }
@@ -106,7 +116,7 @@ public actor SyncExecutor {
                     touched.insert(conversationID)
                 }
                 // 单事件成功后再推进，失败中断不丢后续重拉。
-                try database.updateSyncCursor(
+                try cursorStore.updateSyncCursor(
                     userID: creds.userID,
                     deviceID: creds.deviceID,
                     lastEventSeq: event.eventSeq
@@ -134,7 +144,12 @@ public actor SyncExecutor {
         case "message_created":
             guard let data = event.payload.data(using: .utf8) else { return nil }
             let payload = try JSONDecoder().decode(MessageCreatedPayload.self, from: data)
-            try IncomingMessageApplier.applyMessageCreated(payload, myUserID: myUserID, database: database)
+            try IncomingMessageApplier.applyMessageCreated(
+                payload,
+                myUserID: myUserID,
+                messages: messageStore,
+                conversations: conversationStore
+            )
             return payload.conversationID
         default:
             // 未知类型跳过但仍推进游标，避免卡死；后续票可扩展。

@@ -12,7 +12,7 @@
 |------|------|
 | 票里的技术是否都有对应文档？ | **大框架有**；0040/0041 踩坑见工程问题 16–18；**0043–0048** 见本文 §2 / §5–§7 + 高负载对照表 + 工程问题 **19**。 |
 | 粘包？ | **走 `URLSessionWebSocketTask` 时，应用层几乎不会撞上经典 TCP 粘包**；见工程问题 16。 |
-| Domain 仓储协议都实现了吗？ | **只有 `AuthRepository` 真 conform**；其余能力在具体 Executor/API 上。见 §7 与工程问题 **19**。 |
+| Domain 仓储协议都实现了吗？ | **细粒度 Store/Remote 已落地（0052）**；`AuthRepository` + `WebSocketTransport` 保留；粗 `*Repository` 已删。见 §7 与工程问题 **19**。 |
 | 高负载 10 项还剩什么？ | #9 图片（0049）、#横切 Instruments（0050）；其余主链路项已勾选。 |
 
 ---
@@ -154,19 +154,20 @@
 
 ## 7. Domain 仓储协议落地现状
 
-详见工程问题 **[19](./engineering-problems/19-domain-repository-ports-vs-concrete-executors.md)**。
+详见工程问题 **[19](./engineering-problems/19-domain-repository-ports-vs-concrete-executors.md)**（0051 文档降级 → **0052 细粒度 Port 已完成** → 0053 AppServices Fake）。
 
-| Domain 协议 | 状态 | 实际类型 |
+| Domain 协议 | 角色 | 实际类型 |
 |-------------|------|----------|
-| `AuthRepository` | ✅ | `AuthRepositoryLive` |
-| `MessageRepository` | ⚠️ 未 conform | `LocalDatabase` + `MessageAPI` + `MessageSendExecutor` |
-| `ConversationRepository` | ⚠️ | `ConversationAPI` + `LocalDatabase` |
-| `SyncRepository` | ⚠️ | `SyncAPI` + `LocalDatabase` + `SyncExecutor` |
-| `PushRepository` | ⚠️ | `PushTokenAPI` + `SilentSyncWakeHandler` |
-| `WebSocketRepository` | ⚠️ | 更贴地：`WebSocketTransport` → `URLSessionWebSocketTransport`；编排 `RealtimeSession` |
-| `MediaRepository` | ❌ | 0049 |
+| `AuthRepository` | ✅ 正式保留 | `AuthRepositoryLive` |
+| `WebSocketTransport` | ✅ 正式保留 | `URLSessionWebSocketTransport`；编排 `RealtimeSession` |
+| `MessageStore` / `MessageRemote` | ✅ | `LocalDatabase` / `MessageAPI` → `MessageSendExecutor` |
+| `SyncCursorStore` / `SyncRemote` | ✅ | `LocalDatabase` / `SyncAPI` → `SyncExecutor` |
+| `ConversationStore` / `ConversationRemote` | ✅ | `LocalDatabase` / `ConversationAPI` |
+| `MediaRepository` | ❌ 未做 | 留给 [0049](../issues/0049-ios-image-message.md) |
 
-DTO（`SendMessageRequest` / `SyncEvent` / `AuthTokens` 等）**正在使用**，不要把整个文件当成死代码。
+**禁止**空壳 `MessageRepositoryLive`。粗 `MessageRepository` / `SyncRepository` / `ConversationRepository` / `WebSocketRepository` / `PushRepository` **已删除**，不再是待实现清单。
+
+DTO（`SendMessageRequest` / `SyncEvent` / `AuthTokens` 等）**正在使用**。Fake 测见 `PortFakesTests`；`AppServices` 组合根 Port 化留给 0053。
 
 ---
 

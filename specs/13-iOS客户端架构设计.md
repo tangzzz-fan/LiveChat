@@ -40,7 +40,7 @@
                    │
 ┌──────────────────▼──────────────────────────┐
 │              ChatDomain                     │
-│  Entities, Repository Protocols,            │
+│  Entities, Ports（Auth + 细粒度 Store/Remote 演进中）, │
 │  State Machine Rules, Business Policies     │
 │  不依赖任何具体框架                          │
 └──────────────────┬──────────────────────────┘
@@ -49,7 +49,8 @@
 │           ChatInfrastructure                │
 │  Network, WebSocket, Local DB (GRDB),       │
 │  Keychain, Push, File Cache, Logging        │
-│  实现 ChatDomain 的 Repository Protocols     │
+│  实现正式 Port；主路径经 Executor 组合       │
+│  （粗 *Repository 为历史脚手架，见 §6）      │
 └─────────────────────────────────────────────┘
                    │
 ┌──────────────────┴──────────────────────────┐
@@ -235,64 +236,68 @@ actor SyncExecutor {
 
 ## 6. 仓储协议清单
 
-> **落地现状（2026-07）**：文件 `ChatDomain/RepositoryProtocols.swift` 仍是端口清单 + 共享 DTO。  
-> **仅 `AuthRepository` → `AuthRepositoryLive` 真 conform**；消息/会话/同步/推送/WS 主路径用拆开的具体类型（`MessageSendExecutor`、`SyncExecutor`、`RealtimeSession`、`WebSocketTransport` 等）。  
-> 详见 [工程问题 19](../docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md) 与 [ios-client-study-guide §7](../docs/ios-client-study-guide.md)。  
-> 后续演进方向：细粒度 Port（如 `MessageStore` / `MessageRemote`），而非空壳 Adapter 强行凑 conform。
+> **阶段 2（0052）已落地**：粗粒度 `*Repository` 已删除；正式端口为细粒度 Store/Remote，由 Executor 组合。  
+> **已验证保留**：`AuthRepository` → `AuthRepositoryLive`；传输缝 `WebSocketTransport` → `URLSessionWebSocketTransport`（会话编排在 `RealtimeSession`，**不要**再引入粗 `WebSocketRepository`）。  
+> **禁止**：写空壳 `MessageRepositoryLive` 等 Adapter。  
+> **测试真相**：`any MessageStore` / `any MessageRemote` / `any SyncRemote` + Fake（见 `PortFakesTests`）；生产仍由 `AppServices.make()` 注入 Live（`LocalDatabase` / `*API` extension conform）。  
+> `MediaRepository` 仍留给 [0049](../issues/0049-ios-image-message.md)。  
+> 下一步：[0053](../issues/0053-ios-appservices-port-injection-fakes.md) 组合根以 Port 组装。  
+> 对照：[工程问题 19](../docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md) · [ios-client-study-guide §7](../docs/ios-client-study-guide.md)。
+
+### 6.1 正式端口
 
 ```swift
-// ChatDomain/RepositoryProtocols.swift
-
-protocol MessageRepository {
-    func getMessages(in conversationId: String, limit: Int) async throws -> [Message]
-    func sendMessage(_ request: SendMessageRequest) async throws -> SendMessageResponse
-    func insertMessage(_ message: Message) async throws
-    func updateMessageStatus(clientMessageId: String, status: MessageStatus) async throws
-}
-
-protocol ConversationRepository {
-    func getConversations() async throws -> [ConversationSummary]
-    func getConversation(id: String) async throws -> ConversationSummary?
-    func upsertConversation(_ conversation: ConversationSummary) async throws
-}
-
-protocol SyncRepository {
-    func getSyncCursor() async throws -> Int64
-    func updateSyncCursor(_ seq: Int64) async throws
-    func syncEvents(from cursor: Int64) async throws -> SyncResponse
-}
-
-protocol PushRepository {
-    func registerPushToken(_ token: Data) async throws
-    func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) async
-}
-
-protocol WebSocketRepository {
-    func connect() async throws
-    func disconnect() async
-    func sendFrame(_ frame: WebSocketFrame) async throws
-    var messageStream: AsyncStream<WebSocketFrame> { get }
-}
-
-/// 传输层抽象：默认 URLSessionWebSocketTask；可替换 Starscream / NWConnection，上层不改。
+/// 传输层抽象：默认 URLSessionWebSocketTask；可替换，上层不改。
 protocol WebSocketTransport {
-    var events: AsyncStream<TransportEvent> { get } // .connected / .frame(Data) / .closed
+    var events: AsyncStream<TransportEvent> { get }
     func connect() async throws
     func send(_ frame: Data) async throws
     func close()
 }
 
 protocol AuthRepository {
-    func login(phone: String, code: String) async throws -> AuthTokens
-    func refreshToken() async throws -> AuthTokens
+    func requestCode(phone: String) async throws -> CodeRequestResponse
+    func verifyCode(...) async throws -> AuthTokens
+    func refreshToken(_ token: String) async throws -> AuthTokens
     func logout() async throws
 }
 
-protocol MediaRepository {
-    func uploadImage(_ data: Data, metadata: ImageMetadata) async throws -> Attachment
-    func downloadImage(objectKey: String) async throws -> Data
+protocol MessageStore {
+    func insertMessage(_ message: Message) throws
+    func updateMessageStatus(clientMessageID: String, status: MessageStatus) throws
+    func updateMessageAccepted(...) throws
+    func fetchPendingSend(limit: Int) throws -> [Message]
+    func upsertRemoteMessage(...) throws
 }
+
+protocol MessageRemote {
+    func sendMessage(_ request: SendMessageRequest) async throws -> SendMessageResponse
+}
+
+protocol SyncCursorStore {
+    func getSyncCursor(userID: Int64, deviceID: String) throws -> Int64
+    func updateSyncCursor(userID: Int64, deviceID: String, lastEventSeq: Int64) throws
+}
+
+protocol SyncRemote {
+    func fetchEvents(from cursor: Int64, limit: Int) async throws -> SyncResponse
+}
+
+protocol ConversationStore {
+    func upsertConversationSummary(_ summary: ConversationSummary) throws
+    func fetchConversationSummaries(userID: Int64) throws -> [ConversationSummary]
+}
+
+protocol ConversationRemote {
+    func ensureDirect(peerUserID: Int64) async throws -> DirectConversationResult
+    func listRemoteSummaries() async throws -> [ConversationSummary]
+}
+
+protocol MediaRepository { /* 留给 0049 */ }
 ```
+
+Live conform：`LocalDatabase` → Store；`MessageAPI` / `SyncAPI` / `ConversationAPI` → Remote。  
+Executor：`MessageSendExecutor(store:remote:)` · `SyncExecutor(cursorStore:remote:messageStore:conversationStore:session:)`。
 
 ## 7. 推送与同步统一入口
 
@@ -422,7 +427,7 @@ func applicationDidFinishLaunching(_ application: UIApplication) {
 - [ ] TGReduxKit / GRDB 边界（本 spec §4.3）
 - [ ] 消息状态机图（本 spec §5.1）
 - [ ] 发送队列与同步执行器设计（本 spec §5.2–5.3）
-- [ ] 仓储协议清单 + `WebSocketTransport`（本 spec §6）
+- [x] 仓储协议清单：粗 Repository 文档降级 + `WebSocketTransport` / `AuthRepository` 正式保留（本 spec §6；0051）
 - [ ] 推送与同步统一入口设计（本 spec §7）
 - [ ] App 生命周期恢复流程（本 spec §8，含前台长连/后台唤醒）
 - [ ] P0 客户端能力边界（本 spec §9）

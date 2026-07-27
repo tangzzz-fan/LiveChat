@@ -1,13 +1,6 @@
 import Foundation
 import ChatDomain
 
-public struct DirectConversationResult: Sendable, Equatable {
-    public let conversationID: String
-    public let type: String
-    public let peerUserID: Int64
-    public let created: Bool
-}
-
 public final class ConversationAPI: Sendable {
     private let http: HTTPClient
     private let session: SessionStore
@@ -131,22 +124,28 @@ public actor MessageSendExecutor {
     /// sending 卡住上限（弱网 / API 挂起）；超时回 queued，由 path 恢复或重试续跑。
     public static let sendingTimeoutNanoseconds: UInt64 = 30_000_000_000
 
-    private let database: LocalDatabase
-    private let api: MessageAPI
+    private let store: any MessageStore
+    private let remote: any MessageRemote
+    private let sendingTimeoutNanoseconds: UInt64
     private var isProcessing = false
     private var sendingStartedAt: [String: ContinuousClock.Instant] = [:]
 
-    public init(database: LocalDatabase, api: MessageAPI) {
-        self.database = database
-        self.api = api
+    public init(
+        store: any MessageStore,
+        remote: any MessageRemote,
+        sendingTimeoutNanoseconds: UInt64 = MessageSendExecutor.sendingTimeoutNanoseconds
+    ) {
+        self.store = store
+        self.remote = remote
+        self.sendingTimeoutNanoseconds = sendingTimeoutNanoseconds
     }
 
     public func enqueueLocalThenSend(_ message: Message) async throws {
-        let pending = try database.fetchPendingSend(limit: Self.maxQueueDepth + 1)
+        let pending = try store.fetchPendingSend(limit: Self.maxQueueDepth + 1)
         if pending.count >= Self.maxQueueDepth {
             throw SendQueueError.full
         }
-        try database.insertMessage(message)
+        try store.insertMessage(message)
         await process()
     }
 
@@ -166,9 +165,9 @@ public actor MessageSendExecutor {
     }
 
     private func reclaimStaleSending(now: ContinuousClock.Instant) throws -> Int {
-        let pending = try database.fetchPendingSend(limit: Self.maxQueueDepth)
+        let pending = try store.fetchPendingSend(limit: Self.maxQueueDepth)
         var count = 0
-        for item in pending where item.status == MessageStatus.sending.rawValue {
+        for item in pending where item.status == .sending {
             let stale: Bool
             if let started = sendingStartedAt[item.clientMessageID] {
                 stale = now - started >= Duration.seconds(30)
@@ -177,7 +176,7 @@ public actor MessageSendExecutor {
                 stale = true
             }
             if stale {
-                try database.updateMessageStatus(
+                try store.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .queued
                 )
@@ -200,16 +199,16 @@ public actor MessageSendExecutor {
                 return
             }
 
-            let batch: [MessageRecord]
+            let batch: [Message]
             do {
-                batch = try database.fetchPendingSend(limit: 1)
+                batch = try store.fetchPendingSend(limit: 1)
             } catch {
                 return
             }
             guard let item = batch.first else { return }
 
             do {
-                try database.updateMessageStatus(
+                try store.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .sending
                 )
@@ -219,10 +218,10 @@ public actor MessageSendExecutor {
                         clientMessageID: item.clientMessageID,
                         conversationID: item.conversationID,
                         messageType: item.messageType,
-                        content: item.content ?? ""
+                        content: item.content
                     )
                 )
-                try database.updateMessageAccepted(
+                try store.updateMessageAccepted(
                     clientMessageID: item.clientMessageID,
                     serverMessageID: response.serverMessageID,
                     conversationSeq: response.conversationSeq,
@@ -235,13 +234,13 @@ public actor MessageSendExecutor {
                 let jitter = Double.random(in: 0...(retryAfter * 0.2))
                 try? await Task.sleep(nanoseconds: UInt64((retryAfter + jitter) * 1_000_000_000))
             } catch is CancellationError {
-                try? database.updateMessageStatus(
+                try? store.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .queued
                 )
                 sendingStartedAt.removeValue(forKey: item.clientMessageID)
             } catch {
-                try? database.updateMessageStatus(
+                try? store.updateMessageStatus(
                     clientMessageID: item.clientMessageID,
                     status: .failed
                 )
@@ -253,10 +252,10 @@ public actor MessageSendExecutor {
     private func sendWithTimeout(_ request: SendMessageRequest) async throws -> SendMessageResponse {
         try await withThrowingTaskGroup(of: SendMessageResponse.self) { group in
             group.addTask {
-                try await self.api.send(request)
+                try await self.remote.sendMessage(request)
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: Self.sendingTimeoutNanoseconds)
+                try await Task.sleep(nanoseconds: self.sendingTimeoutNanoseconds)
                 throw CancellationError()
             }
             let result = try await group.next()!

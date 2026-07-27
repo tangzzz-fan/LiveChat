@@ -339,7 +339,7 @@ extension LocalDatabase {
         seqRows + pending
     }
 
-    public func fetchPendingSend(limit: Int) throws -> [MessageRecord] {
+    public func fetchPendingSendRecords(limit: Int) throws -> [MessageRecord] {
         try dbQueue.read { db in
             try MessageRecord.fetchAll(
                 db,
@@ -377,7 +377,7 @@ extension LocalDatabase {
         }
     }
 
-    public func fetchConversationSummaries(userID: Int64) throws -> [ConversationSummaryRecord] {
+    public func fetchConversationSummaryRecords(userID: Int64) throws -> [ConversationSummaryRecord] {
         try dbQueue.read { db in
             try ConversationSummaryRecord
                 .filter(Column("user_id") == userID)

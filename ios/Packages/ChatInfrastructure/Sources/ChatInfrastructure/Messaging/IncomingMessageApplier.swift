@@ -1,19 +1,28 @@
 import Foundation
 import ChatDomain
 
-/// 把 sync / WS 投递统一落到 GRDB，避免双写竞态。
+/// 把 sync / WS 投递统一落到本地 Store，避免双写竞态。
 public enum IncomingMessageApplier {
     public static func applyMessageCreated(
         _ payload: MessageCreatedPayload,
         myUserID: Int64,
-        database: LocalDatabase
+        messages: any MessageStore,
+        conversations: any ConversationStore
     ) throws {
-        try database.upsertIncomingMessage(from: payload)
+        try messages.upsertRemoteMessage(
+            serverMessageID: payload.serverMessageID,
+            conversationID: payload.conversationID,
+            conversationSeq: payload.conversationSeq,
+            senderUserID: payload.senderUserID,
+            messageType: payload.messageType,
+            content: payload.content,
+            serverReceivedAtMs: payload.serverReceivedAtMs
+        )
         let preview = previewText(from: payload.content)
         let at: Date? = payload.serverReceivedAtMs.map {
             Date(timeIntervalSince1970: Double($0) / 1000)
         }
-        try database.upsertConversationSummary(
+        try conversations.upsertConversationSummary(
             ConversationSummary(
                 userID: myUserID,
                 conversationID: payload.conversationID,
@@ -29,7 +38,8 @@ public enum IncomingMessageApplier {
     public static func applyDelivery(
         _ delivery: Livechat_Ws_WsMessageDelivery,
         myUserID: Int64,
-        database: LocalDatabase
+        messages: any MessageStore,
+        conversations: any ConversationStore
     ) throws {
         let payload = MessageCreatedPayload(
             serverMessageID: delivery.serverMessageID,
@@ -41,7 +51,12 @@ public enum IncomingMessageApplier {
             content: delivery.content,
             serverReceivedAtMs: delivery.serverReceivedAtMs == 0 ? nil : delivery.serverReceivedAtMs
         )
-        try applyMessageCreated(payload, myUserID: myUserID, database: database)
+        try applyMessageCreated(
+            payload,
+            myUserID: myUserID,
+            messages: messages,
+            conversations: conversations
+        )
     }
 
     private static func previewText(from content: String) -> String {

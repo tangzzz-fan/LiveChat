@@ -66,9 +66,15 @@ public struct AppServices: Sendable {
         let db = try LocalDatabase.applicationDefault()
         let conversations = ConversationAPI(http: http, session: session)
         let messages = MessageAPI(http: http, session: session)
-        let sendExecutor = MessageSendExecutor(database: db, api: messages)
+        let sendExecutor = MessageSendExecutor(store: db, remote: messages)
         let syncAPI = SyncAPI(http: http, session: session)
-        let syncExecutor = SyncExecutor(database: db, api: syncAPI, session: session)
+        let syncExecutor = SyncExecutor(
+            cursorStore: db,
+            remote: syncAPI,
+            messageStore: db,
+            conversationStore: db,
+            session: session
+        )
         let realtime = RealtimeSession(gatewayURL: gatewayWSURL, database: db, session: session)
         let pushTokenAPI = PushTokenAPI(http: http, session: session)
         let silentWake = SilentSyncWakeHandler(syncExecutor: syncExecutor)

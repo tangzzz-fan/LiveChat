@@ -63,5 +63,5 @@
 | 16 | [WebSocket 帧边界：为什么不是 TCP 粘包，却仍会踩边界](16-websocket-framing-vs-tcp-sticky-packets.md) | `connection`, `ordering`, `idempotency` | URLSessionWebSocket 已是 message 边界；本仓 1 WS message = 1 WsFrame。真正要防的是双通道重复、错误长度前缀、超大帧——不是手写 TCP 粘包。 |
 | 17 | [原生 WebSocketTask 生命周期与 AsyncStream 单消费者陷阱](17-urlsession-websocket-lifecycle-asyncstream.md) | `connection` | Task/流不能当永续单例；每连新建 transport、单一读循环、订阅 Gate；同 CancellationID 会误杀唯一 listener。 |
 | 18 | [Swift Protobuf 生成入库与版本对齐](18-swift-protobuf-codegen-workflow.md) | `connection`, `observability` | schema 唯一源 + gen_proto 入库；工具链与 SPM 运行时版本、续行脚本坑、与 load_test 对照。 |
-| 19 | [Domain 仓储协议与落地实现漂移](19-domain-repository-ports-vs-concrete-executors.md) | `consistency`, `observability` | Spec 13 §6 协议多数未 conform；主链路是 Executor/API。DTO 仍在用；勿空壳 Adapter 凑数。 |
+| 19 | [Domain 仓储协议与落地实现漂移](19-domain-repository-ports-vs-concrete-executors.md) | `consistency`, `observability` | 粗 Repository 已删（0052）；细粒度 Store/Remote + Executor 依赖协议。0053 收尾 AppServices Fake。 |
 | — | [适应性学习 Roadmap](adaptive-learning-roadmap.md) | *（学习路线图）* | 已识别的高并发概念与落地状态（随实现更新）。 |

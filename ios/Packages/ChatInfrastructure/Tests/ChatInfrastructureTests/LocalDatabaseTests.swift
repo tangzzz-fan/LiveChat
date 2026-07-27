@@ -221,7 +221,7 @@ func projectionObserverDebouncesBurstWrites() async throws {
 func orphanSendingIsReclaimedToQueued() async throws {
     let db = try LocalDatabase.inMemory()
     let api = MessageAPI(http: HTTPClient(), session: SessionStore())
-    let executor = MessageSendExecutor(database: db, api: api)
+    let executor = MessageSendExecutor(store: db, remote: api)
     try db.insertMessage(
         Message(
             clientMessageID: "stuck-1",
@@ -237,7 +237,7 @@ func orphanSendingIsReclaimedToQueued() async throws {
     #expect(reclaimed == 1)
     let pending = try db.fetchPendingSend(limit: 10)
     #expect(pending.count == 1)
-    #expect(pending[0].status == MessageStatus.queued.rawValue)
+    #expect(pending[0].status == .queued)
 }
 
 @Test

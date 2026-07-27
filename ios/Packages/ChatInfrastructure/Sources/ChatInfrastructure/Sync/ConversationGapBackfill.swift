@@ -193,7 +193,8 @@ public actor ConversationGapBackfill {
                 try IncomingMessageApplier.applyMessageCreated(
                     payload,
                     myUserID: myUserID,
-                    database: database
+                    messages: database,
+                    conversations: database
                 )
                 applied += 1
                 cursor = remote.conversationSeq + 1

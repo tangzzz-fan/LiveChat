@@ -2,19 +2,78 @@ import Foundation
 
 // MARK: - 落地说明（Spec 13 §6）
 //
-// 本文件是 Domain「端口」清单 + 共享 DTO。
-// 除 AuthRepository 外，多数协议尚未被 Infrastructure `conform`；
-// 主链路用拆开的具体类型（Executor / API / LocalDatabase）。
-// 完整对照表：docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md
+// 阶段 1（0051）：粗 *Repository 文档降级为历史脚手架。
+// 阶段 2（0052）：细粒度 Store/Remote；Executor 依赖协议；粗协议已删除。
+// 阶段 3（0053）：AppServices 以 Port 组装 + Fake 可测主路径。
+//
+// 正式保留：AuthRepository；传输缝 WebSocketTransport（Infra）。
+// 禁止空壳 MessageRepositoryLive 等 Adapter 凑 conform。
+// MediaRepository 留给 0049（未实现）。
+// 对照：docs/engineering-problems/19-domain-repository-ports-vs-concrete-executors.md
 
-/// 本地消息读写 + 远程发送的粗粒度端口（脚手架）。
-/// 落地：`LocalDatabase` + `MessageAPI` + `MessageSendExecutor`（未直接 conform）。
-public protocol MessageRepository: Sendable {
-    func getMessages(in conversationID: String, afterSeq: Int64?, limit: Int) async throws -> [Message]
-    func insertMessage(_ message: Message) async throws
-    func updateMessageStatus(clientMessageID: String, status: MessageStatus) async throws
+// MARK: - Fine-grained ports（0052）
+
+/// 本地发送队列所需表面（勿把整个 LocalDatabase 打成巨 Port）。
+public protocol MessageStore: Sendable {
+    func insertMessage(_ message: Message) throws
+    func updateMessageStatus(clientMessageID: String, status: MessageStatus) throws
+    func updateMessageAccepted(
+        clientMessageID: String,
+        serverMessageID: String,
+        conversationSeq: Int64,
+        serverReceivedAtMs: Int64
+    ) throws
+    func fetchPendingSend(limit: Int) throws -> [Message]
+    /// Sync / 投递落库：按 server_message_id 幂等写入已接受消息。
+    func upsertRemoteMessage(
+        serverMessageID: String,
+        conversationID: String,
+        conversationSeq: Int64,
+        senderUserID: Int64,
+        messageType: String,
+        content: String,
+        serverReceivedAtMs: Int64?
+    ) throws
+}
+
+public protocol MessageRemote: Sendable {
     func sendMessage(_ request: SendMessageRequest) async throws -> SendMessageResponse
 }
+
+public protocol SyncCursorStore: Sendable {
+    func getSyncCursor(userID: Int64, deviceID: String) throws -> Int64
+    func updateSyncCursor(userID: Int64, deviceID: String, lastEventSeq: Int64) throws
+}
+
+public protocol SyncRemote: Sendable {
+    func fetchEvents(from cursor: Int64, limit: Int) async throws -> SyncResponse
+}
+
+public protocol ConversationStore: Sendable {
+    func upsertConversationSummary(_ summary: ConversationSummary) throws
+    func fetchConversationSummaries(userID: Int64) throws -> [ConversationSummary]
+}
+
+public struct DirectConversationResult: Sendable, Equatable {
+    public let conversationID: String
+    public let type: String
+    public let peerUserID: Int64
+    public let created: Bool
+
+    public init(conversationID: String, type: String, peerUserID: Int64, created: Bool) {
+        self.conversationID = conversationID
+        self.type = type
+        self.peerUserID = peerUserID
+        self.created = created
+    }
+}
+
+public protocol ConversationRemote: Sendable {
+    func ensureDirect(peerUserID: Int64) async throws -> DirectConversationResult
+    func listRemoteSummaries() async throws -> [ConversationSummary]
+}
+
+// MARK: - Shared DTOs
 
 public struct SendMessageRequest: Codable, Sendable {
     public let clientMessageID: String
@@ -52,19 +111,6 @@ public struct SendMessageResponse: Codable, Sendable {
         self.isDuplicate = isDuplicate
         self.serverReceivedAtMs = serverReceivedAtMs
     }
-}
-
-/// 落地：`ConversationAPI` + `LocalDatabase`（未直接 conform）。
-public protocol ConversationRepository: Sendable {
-    func getConversations() async throws -> [ConversationSummary]
-    func upsertConversation(_ conversation: ConversationSummary) async throws
-}
-
-/// 落地：`SyncAPI` + `LocalDatabase`；编排见 `SyncExecutor`（未直接 conform）。
-public protocol SyncRepository: Sendable {
-    func getSyncCursor() async throws -> Int64
-    func updateSyncCursor(_ seq: Int64) async throws
-    func fetchEvents(from cursor: Int64) async throws -> SyncResponse
 }
 
 public struct SyncEvent: Codable, Sendable {
@@ -152,12 +198,6 @@ public struct AuthTokens: Codable, Sendable {
     }
 }
 
-/// 落地：`PushTokenAPI` + `SilentSyncWakeHandler`（签名不完全对齐，未 conform）。
-public protocol PushRepository: Sendable {
-    func registerPushToken(_ token: Data) async throws
-    func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) async
-}
-
 /// 应用层协议帧（protobuf 编解码在 Infrastructure）
 public struct WebSocketFrame: Sendable {
     public let opcode: UInt32
@@ -169,16 +209,7 @@ public struct WebSocketFrame: Sendable {
     }
 }
 
-/// 脚手架端口；更贴地的传输抽象是 Infrastructure 的 `WebSocketTransport`。
-/// 落地编排：`RealtimeSession` + `URLSessionWebSocketTransport`（未 conform 本协议）。
-public protocol WebSocketRepository: Sendable {
-    func connect() async throws
-    func disconnect() async
-    func sendFrame(_ frame: WebSocketFrame) async throws
-    var messageStream: AsyncStream<WebSocketFrame> { get }
-}
-
-/// 留给 0049；服务端媒体 API 已就绪（0014）。
+/// 留给 0049；服务端媒体 API 已就绪（0014）。未实现。
 public protocol MediaRepository: Sendable {
     func uploadImage(_ data: Data, metadata: ImageMetadata) async throws -> Attachment
     func downloadImage(objectKey: String) async throws -> Data
