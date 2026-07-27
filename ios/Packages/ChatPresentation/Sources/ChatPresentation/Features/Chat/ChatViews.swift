@@ -253,7 +253,12 @@ public struct ChatThreadView: View {
 
             ScrollViewReader { proxy in
                 List(store.state.chat.visibleMessages) { message in
-                    HStack {
+                    let selected = store.state.chat.selectedClientMessageIDs.contains(message.clientMessageID)
+                    HStack(spacing: 8) {
+                        if store.state.chat.isMultiSelecting {
+                            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                        }
                         if message.isMine { Spacer(minLength: 40) }
                         VStack(alignment: message.isMine ? .trailing : .leading, spacing: 4) {
                             if message.isImage, let objectKey = message.imageObjectKey {
@@ -292,32 +297,43 @@ public struct ChatThreadView: View {
                         .background(message.isMine ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .contextMenu {
-                            if !message.isImage {
-                                Button("复制") {
-                                    store.dispatch(.chat(.copyMessageTapped(message.text)))
+                            if !store.state.chat.isMultiSelecting {
+                                if !message.isImage {
+                                    Button("复制") {
+                                        store.dispatch(.chat(.copyMessageTapped(message.text)))
+                                    }
                                 }
-                            }
-                            if message.isMine,
-                               message.status == "queued" || message.status == "sending" {
-                                Button("取消发送", role: .destructive) {
-                                    store.dispatch(.chat(.cancelSendTapped(message.clientMessageID)))
+                                Button("选择") {
+                                    store.dispatch(.chat(.enterMultiSelect(message.clientMessageID)))
                                 }
-                            }
-                            Button("删除", role: .destructive) {
-                                store.dispatch(.chat(.deleteLocalMessageTapped(message.clientMessageID)))
-                            }
-                            if message.isMine, message.status == "failed" {
-                                Button("重试") {
-                                    store.dispatch(.chat(.retryMessageTapped(message.clientMessageID)))
+                                if message.isMine,
+                                   message.status == "queued" || message.status == "sending" {
+                                    Button("取消发送", role: .destructive) {
+                                        store.dispatch(.chat(.cancelSendTapped(message.clientMessageID)))
+                                    }
+                                }
+                                Button("删除", role: .destructive) {
+                                    store.dispatch(.chat(.deleteLocalMessageTapped(message.clientMessageID)))
+                                }
+                                if message.isMine, message.status == "failed" {
+                                    Button("重试") {
+                                        store.dispatch(.chat(.retryMessageTapped(message.clientMessageID)))
+                                    }
                                 }
                             }
                         }
                         if !message.isMine { Spacer(minLength: 40) }
                     }
                     .listRowSeparator(.hidden)
+                    .listRowBackground(selected ? Color.accentColor.opacity(0.08) : Color.clear)
                     .id(message.id)
+                    .contentShape(Rectangle())
                     .onTapGesture {
-                        dismissComposerIfNeeded()
+                        if store.state.chat.isMultiSelecting {
+                            store.dispatch(.chat(.toggleMessageSelection(message.clientMessageID)))
+                        } else {
+                            dismissComposerIfNeeded()
+                        }
                     }
                 }
                 .listStyle(.plain)
@@ -363,17 +379,48 @@ public struct ChatThreadView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            composerBar
+            if store.state.chat.isMultiSelecting {
+                multiSelectBar
+            } else {
+                composerBar
+            }
         }
         .navigationTitle(threadTitle)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("返回") { store.dispatch(.chat(.leaveConversation)) }
+            if store.state.chat.isMultiSelecting {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { store.dispatch(.chat(.exitMultiSelect)) }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Text("已选 \(store.state.chat.selectedClientMessageIDs.count)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("返回") { store.dispatch(.chat(.leaveConversation)) }
+                }
             }
         }
+    }
+
+    private var multiSelectBar: some View {
+        HStack(spacing: 16) {
+            Button("删除", role: .destructive) {
+                store.dispatch(.chat(.batchDeleteSelectedTapped))
+            }
+            .disabled(store.state.chat.selectedClientMessageIDs.isEmpty)
+            Button("转发") {
+                store.dispatch(.chat(.forwardSelectedTapped))
+            }
+            .disabled(store.state.chat.selectedClientMessageIDs.isEmpty)
+            Spacer()
+        }
+        .padding()
+        .background(.bar)
     }
 
     private var composerBar: some View {

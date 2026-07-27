@@ -257,6 +257,19 @@ func makeChatMiddleware(services: AppServices) -> Middleware<AppState, AppAction
             store.runTask(id: CancellationID("chat.cancelSend.\(clientMessageID)")) {
                 await services.sendExecutor.cancelSend(clientMessageID: clientMessageID)
             }
+        case .enterMultiSelect, .toggleMessageSelection, .exitMultiSelect:
+            break
+        case .batchDeleteSelectedTapped:
+            let ids = Array(store.state.chat.selectedClientMessageIDs)
+            store.runTask(id: CancellationID("chat.batchDelete")) {
+                for id in ids {
+                    try? services.database.deleteLocalMessage(clientMessageID: id)
+                }
+                await store.dispatch(.chat(.exitMultiSelect))
+            }
+        case .forwardSelectedTapped:
+            // 0058 完整转发；此处仅占位提示。
+            store.dispatch(.chat(.failed("转发功能见 0058（尚未实现）")))
         case .syncTapped, .sceneBecameActive:
             guard store.state.isLoggedIn else { return }
             let activeConversationID = store.state.chat.activeConversationID

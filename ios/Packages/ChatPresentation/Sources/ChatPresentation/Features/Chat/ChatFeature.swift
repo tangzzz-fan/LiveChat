@@ -17,6 +17,9 @@ public struct ChatState: Equatable, Sendable {
     public var syncBanner: String?
     public var isSyncing: Bool
     public var pushTokenBanner: String?
+    /// 0057：多选模式；选中集合为 client_message_id。
+    public var isMultiSelecting: Bool
+    public var selectedClientMessageIDs: Set<String>
 
     public struct ConversationRow: Equatable, Sendable, Identifiable {
         public var id: String { conversationID }
@@ -91,7 +94,9 @@ public struct ChatState: Equatable, Sendable {
         connectionBanner: String? = nil,
         syncBanner: String? = nil,
         isSyncing: Bool = false,
-        pushTokenBanner: String? = nil
+        pushTokenBanner: String? = nil,
+        isMultiSelecting: Bool = false,
+        selectedClientMessageIDs: Set<String> = []
     ) {
         self.peerUserIDInput = peerUserIDInput
         self.conversationRows = conversationRows
@@ -106,6 +111,8 @@ public struct ChatState: Equatable, Sendable {
         self.syncBanner = syncBanner
         self.isSyncing = isSyncing
         self.pushTokenBanner = pushTokenBanner
+        self.isMultiSelecting = isMultiSelecting
+        self.selectedClientMessageIDs = selectedClientMessageIDs
     }
 }
 
@@ -124,6 +131,11 @@ public enum ChatAction: Sendable {
     case deleteLocalMessageTapped(String)
     case retryMessageTapped(String)
     case cancelSendTapped(String)
+    case enterMultiSelect(String)
+    case toggleMessageSelection(String)
+    case exitMultiSelect
+    case batchDeleteSelectedTapped
+    case forwardSelectedTapped
     case syncTapped
     case sceneBecameActive
     case sceneBecameBackground
@@ -154,7 +166,7 @@ public enum ChatFeature {
         case .openDirectTapped, .refreshConversationsTapped, .sendTapped, .sendImageTapped,
              .loadOlderMessagesTapped, .retryQueuedTapped,
              .copyMessageTapped, .deleteLocalMessageTapped, .retryMessageTapped,
-             .cancelSendTapped,
+             .cancelSendTapped, .batchDeleteSelectedTapped, .forwardSelectedTapped,
              .syncTapped, .sceneBecameActive, .sceneBecameBackground,
              .realtimeEnsureStarted, .realtimeStop,
              .registerPushTokenTapped, .pushTokenReceived, .silentPushWakeTapped, .silentPushWake:
@@ -170,12 +182,30 @@ public enum ChatFeature {
             state.oldestLoadedSeq = nil
             state.hasMoreOlder = false
             state.errorMessage = nil
+            state.isMultiSelecting = false
+            state.selectedClientMessageIDs = []
         case .leaveConversation:
             state.activeConversationID = nil
             state.visibleMessages = []
             state.oldestLoadedSeq = nil
             state.hasMoreOlder = false
             state.composeDraft = ""
+            state.isMultiSelecting = false
+            state.selectedClientMessageIDs = []
+        case .enterMultiSelect(let clientMessageID):
+            state.isMultiSelecting = true
+            state.selectedClientMessageIDs = [clientMessageID]
+            state.errorMessage = nil
+        case .toggleMessageSelection(let clientMessageID):
+            guard state.isMultiSelecting else { return }
+            if state.selectedClientMessageIDs.contains(clientMessageID) {
+                state.selectedClientMessageIDs.remove(clientMessageID)
+            } else {
+                state.selectedClientMessageIDs.insert(clientMessageID)
+            }
+        case .exitMultiSelect:
+            state.isMultiSelecting = false
+            state.selectedClientMessageIDs = []
         case .updateDraft(let text):
             state.composeDraft = text
         case .busy(let busy):
@@ -194,11 +224,18 @@ public enum ChatFeature {
             state.hasMoreOlder = hasMore
             state.isBusy = false
             state.errorMessage = nil
+            state.isMultiSelecting = false
+            state.selectedClientMessageIDs = []
         case .visibleMessagesUpdated(let messages, let oldest, let hasMore):
             state.visibleMessages = messages
             state.oldestLoadedSeq = oldest
             state.hasMoreOlder = hasMore
             state.isBusy = false
+            // 多选中若消息被删，收敛选中集。
+            if state.isMultiSelecting {
+                let visible = Set(messages.map(\.clientMessageID))
+                state.selectedClientMessageIDs = state.selectedClientMessageIDs.intersection(visible)
+            }
         case .olderMessagesPrepended(let older, let oldest, let hasMore):
             state.visibleMessages = older + state.visibleMessages
             state.oldestLoadedSeq = oldest

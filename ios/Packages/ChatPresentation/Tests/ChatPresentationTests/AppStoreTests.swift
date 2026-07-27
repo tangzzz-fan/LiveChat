@@ -76,3 +76,19 @@ func selectConversationClearsMessageWindow() {
     #expect(store.state.chat.oldestLoadedSeq == nil)
     #expect(!store.state.chat.hasMoreOlder)
 }
+
+@Test
+@MainActor
+func multiSelectEnterToggleAndExit() {
+    let store = AppStoreFactory.make()
+    store.dispatch(.chat(.enterMultiSelect("m1")))
+    #expect(store.state.chat.isMultiSelecting)
+    #expect(store.state.chat.selectedClientMessageIDs == ["m1"])
+    store.dispatch(.chat(.toggleMessageSelection("m2")))
+    #expect(store.state.chat.selectedClientMessageIDs == ["m1", "m2"])
+    store.dispatch(.chat(.toggleMessageSelection("m1")))
+    #expect(store.state.chat.selectedClientMessageIDs == ["m2"])
+    store.dispatch(.chat(.exitMultiSelect))
+    #expect(!store.state.chat.isMultiSelecting)
+    #expect(store.state.chat.selectedClientMessageIDs.isEmpty)
+}
